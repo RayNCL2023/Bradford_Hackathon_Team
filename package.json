@@ -1,0 +1,17 @@
+{
+  "name": "ai-beat-studio",
+  "version": "0.1.0",
+  "description": "An agentic AI music studio: play a beat, a local Gemma model builds the backing track.",
+  "license": "MIT",
+  "type": "module",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "check": "node scripts/check.mjs"
+  },
+  "dependencies": {
+    "@google/genai": "^2.27.0",
+    "electron": "^44.5.1",
+    "tone": "^15.1.22"
+  }
+}

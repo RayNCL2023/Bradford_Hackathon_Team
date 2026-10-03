@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; media-src 'self' file: blob: data:; img-src 'self' data:" />
+  <title>AI Beat Studio</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="shell.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand"><span class="logo"></span>AI Beat Studio</div>
+
+    <div class="moods" id="moods" role="group" aria-label="Mood"></div>
+
+    <div class="transport">
+      <button class="btn icon" id="play" title="Play (Space)">▶</button>
+      <button class="btn icon" id="stop" title="Stop">■</button>
+      <button class="btn rec" id="rec" title="Record what you play (R)" aria-pressed="false">● Rec</button>
+      <label class="bpm" title="Speed">BPM <input id="bpm" type="number" min="60" max="200" value="124" /></label>
+    </div>
+
+    <button class="btn magic" id="produce">✦ Make it a banger</button>
+  </header>
+
+  <main class="layout">
+    <aside class="tracks">
+      <h2 class="side-h">Tracks</h2>
+      <ul id="trackList"></ul>
+      <button class="btn ghost" id="clear">Clear my beat</button>
+      <div class="help">
+        <b>How to play</b>
+        <p>Tap <kbd>A</kbd>–<kbd>L</kbd> and <kbd>Q</kbd>–<kbd>P</kbd>. Every key sounds good. <kbd>Z</kbd>/<kbd>X</kbd> = lower/higher.</p>
+        <p>Press <b>Rec</b>, then <b>▶</b>, and tap a rhythm. Or click the grid.</p>
+      </div>
+    </aside>
+
+    <section class="centre">
+      <div class="stage" id="stage"></div>
+      <div class="roll-wrap"><div id="roll"></div></div>
+      <div class="status" id="status">Ready. Pick a mood and tap out a beat.</div>
+    </section>
+
+    <aside class="panel" id="panel"></aside>
+  </main>
+
+  <script src="../../node_modules/tone/build/Tone.js"></script>
+  <script type="module" src="shell.js"></script>
+</body>
+</html>
