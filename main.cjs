@@ -89,6 +89,15 @@ if (process.env.SMOKE) {
         await js(`document.querySelector('[data-addloop]')?.click()`);
         await wait(1500);
         console.log("[smoke] loop:", await js(`document.getElementById("status").textContent`));
+        // Drag the first audio clip right by ~1/8 of the lane, then delete the last one.
+        await js(`(() => { const el = document.querySelector(".aclip"); if (!el) return; const r = el.getBoundingClientRect(), w = el.parentElement.getBoundingClientRect().width;
+          const o = (x) => ({ pointerId: 7, bubbles: true, clientX: x, clientY: r.top + 5 });
+          el.dispatchEvent(new PointerEvent("pointerdown", o(r.left + 4))); el.dispatchEvent(new PointerEvent("pointermove", o(r.left + 4 + w / 8))); el.dispatchEvent(new PointerEvent("pointerup", o(r.left + 4 + w / 8))); })()`);
+        await wait(400);
+        console.log("[smoke] drag:", await js(`document.getElementById("status").textContent`));
+        await js(`[...document.querySelectorAll("[data-delaudio]")].pop()?.click()`);
+        await wait(400);
+        console.log("[smoke] delete:", await js(`document.getElementById("status").textContent + " | clips left: " + document.querySelectorAll(".aclip").length`));
       }
       await wait(2500);
       // capturePage can fail (UnknownVizError) when the window is hidden or covered: retry once in front, never abort the run.

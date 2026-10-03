@@ -247,6 +247,27 @@ export function updateClip(id, opts) {
   c.player.connect(c.chain[0]);
 }
 
+/** Move a clip on the timeline (new start in beats; loop clips keep their length). */
+export function moveClip(id, startBeat) {
+  const c = clips.get(id);
+  if (!c) return;
+  c.player.unsync();
+  c.player.stop();
+  c.player.sync().start(ticks(startBeat));
+  if (c.opts.loopBars) c.player.stop(ticks(startBeat + c.opts.loopBars * 4));
+  c.startBeat = startBeat;
+}
+
+/** Take a clip off the timeline for good. */
+export function removeClip(id) {
+  const c = clips.get(id);
+  if (!c) return;
+  try { c.player.unsync(); c.player.stop(); } catch { /* already stopped */ }
+  c.player.dispose();
+  c.chain.forEach((n) => n.dispose());
+  clips.delete(id);
+}
+
 /** Play a clip right now with the given pitch / tone (for auditioning in the panel). */
 let preview = null, previewSeq = 0;
 function stopPreview() {

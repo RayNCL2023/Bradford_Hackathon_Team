@@ -122,7 +122,7 @@ voice.mountPanel($("panel"), {
   onAddClip: async ({ url, name, bar, opts }) => {
     await audio.init();
     const id = await audio.addClip(url, (bar - 1) * 4, opts);
-    project.clips.push({ id, name, url, startBeat: (bar - 1) * 4 });
+    project.clips.push({ id, name, url, startBeat: (bar - 1) * 4, kind: "vocal", lenBeats: 2 });
     refreshAll(false);
     status(`Added "${name}" at bar ${bar}. Change its pitch or tone any time.`);
     explain("ELEVENLABS", `Vocal “${name}” dropped into bar ${bar}`, `Voiced by ElevenLabs; pitch and ${opts?.tone && opts.tone !== "clean" ? opts.tone : "tone"} effects run live in the studio at no extra cost.`);
@@ -200,10 +200,14 @@ function renderLanes() {
       }
     }
   }
+  // Audio clips (vocals, ad-libs, samples): drag to move (snaps to the Quantise grid), click to select, × or Delete to remove.
   for (const c of project.clips) {
-    const bar = Math.floor(c.startBeat / 4);
-    rows.push(`<div class="lane"><div class="lane-name"><span class="ln-title"><span class="sw" style="background:var(--lilac)"></span><b>“${esc(c.name)}”</b><small>AUDIO</small></span></div>
-      <div class="lane-clips" style="${cols}"><div class="clip-block" style="grid-column:${bar + 1}/${bar + 2};background:var(--lilac)"><span>Vox</span></div></div></div>`);
+    const len = Math.min(c.lenBeats || 4, loopBeats() - Math.min(c.startBeat, loopBeats() - 0.25));
+    const left = (c.startBeat / loopBeats()) * 100, width = Math.max(2, (len / loopBeats()) * 100);
+    rows.push(`<div class="lane"><div class="lane-name"><span class="ln-title"><span class="sw" style="background:var(--lilac)"></span><b>“${esc(c.name)}”</b><small>${c.kind === "sample" ? "SAMPLE" : "VOCAL"}</small></span>
+        <span class="lane-btns"><button class="lb" data-delaudio="${esc(c.id)}" title="Remove this clip">✕</button></span></div>
+      <div class="lane-clips aclips"><div class="aclip${selectedClip === c.id ? " sel" : ""}" data-aclip="${esc(c.id)}" style="left:${left}%;width:${width}%" title="Drag to move · click to select · Delete to remove">
+        <span>${esc(c.kind === "sample" ? "Sample" : "Vox")} · bar ${Math.floor(c.startBeat / 4) + 1}.${Math.floor(c.startBeat % 4) + 1}</span><button class="clip-x" data-delaudio="${esc(c.id)}" title="Remove">×</button></div></div></div>`);
   }
   rows.push(`<div class="lane add-row"><div class="lane-name"><label class="add-layer">+ Add layer <select id="addLayer" aria-label="Add a layer">
       <option value="">choose…</option><optgroup label="Drum piece"><option value="36">Kick</option><option value="38">Snare</option><option value="39">Clap</option><option value="42">Hat</option><option value="46">Open hat</option><option value="49">Crash</option></optgroup>
@@ -674,7 +678,7 @@ $("samples").addEventListener("click", async (e) => {
     const bar = playing ? Math.floor((audio.getBeat() % loopBeats()) / 4) + 1 : 1;
     const loopBars = s.category === "loop" ? project.bars - bar + 1 : 0;
     const id = await audio.addClip(s.url, (bar - 1) * 4, { sourceBpm: s.bpm || 0, loopBars });
-    project.clips.push({ id, name: s.name, url: s.url, startBeat: (bar - 1) * 4 });
+    project.clips.push({ id, name: s.name, url: s.url, startBeat: (bar - 1) * 4, kind: "sample", lenBeats: loopBars ? loopBars * 4 : 2 });
     refreshAll(false);
     status(`Added "${s.name}" at bar ${bar}${loopBars ? `, looping to bar ${project.bars}` : ""}${s.bpm ? `, stretched from ${s.bpm} to ${project.bpm} BPM` : ""}.`);
   }
@@ -765,5 +769,69 @@ $("genre").addEventListener("change", () => {
     const name = o.text.split(" ·")[0];
     explain("AI PRODUCER", `Genre: ${name}`, `Tempo set to ${o.dataset.bpm} BPM. The producer will write drums, bass and synths in this style.`, 3500);
     remember(`The user chose the genre ${name}.`);
+  }
+});
+
+// ---------- Audio clips on the playlist: select, drag to time them, delete ----------
+var selectedClip = null; // var: read by renderLanes before this line runs
+function removeAudioClip(id) {
+  const c = project.clips.find((x) => x.id === id);
+  if (!c) return;
+  audio.removeClip(id);
+  project.clips = project.clips.filter((x) => x.id !== id);
+  if (selectedClip === id) selectedClip = null;
+  refreshAll(false);
+  status(`Removed “${c.name}” from the track.`);
+}
+$("lanes").addEventListener("click", (e) => {
+  const del = e.target.closest("[data-delaudio]");
+  if (del) { e.stopPropagation(); removeAudioClip(del.dataset.delaudio); }
+});
+$("lanes").addEventListener("pointerdown", (e) => {
+  const el = e.target.closest(".aclip");
+  if (!el || e.target.closest(".clip-x")) return;
+  const c = project.clips.find((x) => x.id === el.dataset.aclip);
+  if (!c) return;
+  e.preventDefault();
+  selectedClip = c.id;
+  document.querySelectorAll(".aclip.sel").forEach((x) => x.classList.remove("sel"));
+  el.classList.add("sel");
+  const area = el.parentElement.getBoundingClientRect();
+  const startX = e.clientX, from = c.startBeat;
+  let to = from;
+  try { el.setPointerCapture(e.pointerId); } catch { /* synthetic or lost pointer: dragging still works */ }
+  const move = (ev) => {
+    const g = quant() || 0.25;
+    const beats = ((ev.clientX - startX) / area.width) * loopBeats();
+    to = Math.max(0, Math.min(loopBeats() - g, Math.round((from + beats) / g) * g));
+    el.style.left = `${(to / loopBeats()) * 100}%`;
+    el.querySelector("span").textContent = `${c.kind === "sample" ? "Sample" : "Vox"} · bar ${Math.floor(to / 4) + 1}.${Math.floor(to % 4) + 1}`;
+  };
+  const up = () => {
+    el.removeEventListener("pointermove", move);
+    el.removeEventListener("pointerup", up);
+    el.removeEventListener("pointercancel", up);
+    if (to !== from) {
+      c.startBeat = to;
+      audio.moveClip(c.id, to);
+      status(`Moved “${c.name}” to bar ${Math.floor(to / 4) + 1}, beat ${Math.floor(to % 4) + 1}.`);
+      refreshAll(false);
+    }
+  };
+  el.addEventListener("pointermove", move);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+});
+window.addEventListener("keydown", (e) => {
+  if (!selectedClip || e.target?.closest?.("input, textarea, select")) return;
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeAudioClip(selectedClip); }
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    const c = project.clips.find((x) => x.id === selectedClip);
+    if (!c) return;
+    e.preventDefault();
+    const g = quant() || 0.25;
+    c.startBeat = Math.max(0, Math.min(loopBeats() - g, c.startBeat + (e.key === "ArrowRight" ? g : -g)));
+    audio.moveClip(c.id, c.startBeat);
+    refreshAll(false);
   }
 });
