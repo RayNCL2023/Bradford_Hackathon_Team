@@ -15,6 +15,17 @@ if (fs.existsSync(envFile)) {
 
 const ai = require("./src/ai/main.cjs");
 const voice = require("./src/voice/main.cjs");
+const { startRemote } = require("./src/remote/server.cjs");
+
+// Phone pads: notes from the phone go straight to the studio window.
+const toWindow = (channel, data) => BrowserWindow.getAllWindows()[0]?.webContents.send(channel, data);
+const remote = startRemote({
+  onMessage: (m) => { if (process.env.REMOTE_LOG) console.log("[remote] in:", JSON.stringify(m)); toWindow("remote:msg", m); },
+  onClients: (n) => { if (process.env.REMOTE_LOG) console.log("[remote] phones:", n); toWindow("remote:clients", n); },
+});
+ipcMain.handle("remote:info", () => remote.info());
+ipcMain.on("remote:state", (_e, s) => remote.broadcast(s));
+ipcMain.on("remote:beat", (_e, n) => remote.send({ type: "beat", n }));
 
 function createWindow() {
   const win = new BrowserWindow({

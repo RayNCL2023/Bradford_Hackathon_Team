@@ -20,6 +20,7 @@
       <label class="bpm" title="Speed">BPM <input id="bpm" type="number" min="60" max="200" value="124" /></label>
     </div>
 
+    <button class="btn phone" id="phoneBtn"><span class="phone-dot" id="phoneDot"></span><span id="phoneLabel">Connect phone</span></button>
     <button class="btn magic" id="produce">✦ Make it a banger</button>
   </header>
 
@@ -43,6 +44,31 @@
 
     <aside class="panel" id="panel"></aside>
   </main>
+
+  <dialog id="phoneDialog" class="phone-dialog">
+    <form method="dialog" class="pd-inner">
+      <h2>Use your phone as pads</h2>
+      <div class="pd-cols">
+        <div class="pd-col">
+          <h3>Wi-Fi</h3>
+          <img id="qr" alt="QR code to open the pads on your phone" width="220" height="220">
+          <p>Scan with the AI Beat Pads app or your phone camera. Same Wi-Fi as this computer, or its hotspot.</p>
+          <code id="wifiUrl"></code>
+        </div>
+        <div class="pd-col">
+          <h3>USB cable</h3>
+          <p id="usbState">Checking for a phone…</p>
+          <ol>
+            <li>Turn on USB debugging (Settings, Developer options).</li>
+            <li>Plug the phone into this computer and allow the prompt.</li>
+            <li>In the AI Beat Pads app tap <b>USB</b>, or open <code>http://localhost:7777</code>.</li>
+          </ol>
+        </div>
+      </div>
+      <p class="pd-count" id="phoneCount">No phones connected yet.</p>
+      <button class="btn" value="close">Done</button>
+    </form>
+  </dialog>
 
   <script src="../../node_modules/tone/build/Tone.js"></script>
   <script type="module" src="shell.js"></script>

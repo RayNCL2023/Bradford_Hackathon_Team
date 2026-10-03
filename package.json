@@ -12,6 +12,8 @@
   "dependencies": {
     "@google/genai": "^2.27.0",
     "electron": "^44.5.1",
-    "tone": "^15.1.22"
+    "qrcode": "^1.5.4",
+    "tone": "^15.1.22",
+    "ws": "^8.22.0"
   }
 }

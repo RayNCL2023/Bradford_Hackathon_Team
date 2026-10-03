@@ -128,5 +128,25 @@ export function setMood(key) { mood = MOODS[key] || MOODS.dance; }
 /** Remove all of the user's notes. */
 export function clear() { userNotes = []; opts.onChange?.(); draw(); }
 
+/** Play a note from outside (e.g. the phone pads) and record it if recording. Returns the recorded note or null. */
+export function hit(pitch) {
+  opts.onNoteOn?.(pitch);
+  if (!opts.isRecording?.()) return null;
+  const total = bars * BEATS_PER_BAR;
+  const note = { pitch, start: (Math.round(opts.getBeat() * 4) / 4) % total, dur: 0.25, vel: 0.9 };
+  userNotes.push(note);
+  opts.onChange?.();
+  draw();
+  return note;
+}
+
+/** Set a recorded note's length (beats, snapped to 1/16) when the finger lifts. */
+export function setLength(note, beats) {
+  if (!note || !userNotes.includes(note)) return;
+  note.dur = Math.max(0.25, Math.min(8, Math.round(beats * 4) / 4));
+  opts.onChange?.();
+  draw();
+}
+
 /** Move the playhead (beats), or -1 to hide. */
 export function setPlayhead(beat) { playhead = beat; draw(); }

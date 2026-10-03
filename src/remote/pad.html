@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0E0D14">
+<title>Beat Pads</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@600&display=swap">
+<style>
+/* Phone MIDI pads. Owner: Person 1. Sends notes to the computer over the WebSocket; makes no sound itself. */
+:root {
+  --bg: #0E0D14; --panel: #15131C; --panel-2: #1D1A25; --line: #2C2836; --text: #F3EFE6; --muted: #B3ACBE;
+  --amber: #FFB020; --pink: #FF3D7F; --green: #5EE6A8; --red: #FF4D5E;
+  --display: "Unbounded", system-ui, sans-serif; --body: "Manrope", system-ui, sans-serif; --mono: "JetBrains Mono", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: var(--body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+body { display: grid; grid-template-rows: auto 1fr auto; padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px calc(env(safe-area-inset-bottom, 0px) + 10px); gap: 10px; }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+
+.top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.conn { width: 10px; height: 10px; border-radius: 99px; background: var(--red); flex: none; }
+.conn.on { background: var(--green); box-shadow: 0 0 10px var(--green); }
+.title { min-width: 0; display: grid; }
+.title b { font-family: var(--display); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.title span { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.beats { display: flex; gap: 4px; margin-left: auto; flex: none; }
+.beats i { width: 9px; height: 9px; border-radius: 99px; background: var(--line); }
+.beats i.on { background: var(--amber); }
+.beats i.on.down { background: var(--pink); }
+
+.pads { display: grid; gap: 8px; min-height: 0; }
+.pads.melody { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr); }
+.pads.drums { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); }
+@media (orientation: landscape) { .pads.melody { grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(2, 1fr); } }
+.pad { border-radius: 16px; background: var(--panel-2); border: 1px solid var(--line); display: grid; place-items: center; align-content: center; gap: 2px; position: relative; transition: transform .04s, background .04s; }
+.pad b { font-family: var(--display); font-size: clamp(14px, 4.5vw, 22px); }
+.pad small { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.pad.root { border-color: #5A4A20; }
+.pad.on { background: var(--amber); color: var(--bg); transform: scale(.97); box-shadow: 0 0 28px #FFB02088; }
+.pad.on small { color: var(--bg); }
+.drums .pad.on { background: var(--pink); box-shadow: 0 0 28px #FF3D7F88; }
+
+.bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+.seg button { min-height: 40px; padding: 0 14px; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 800; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+.btn { min-height: 46px; min-width: 46px; padding: 0 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); font-weight: 800; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn.rec[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+.btn.play[aria-pressed="true"] { background: var(--green); border-color: var(--green); color: var(--bg); }
+.oct { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 34px; text-align: center; }
+.spacer { flex: 1; }
+.overlay { position: fixed; inset: 0; background: #0E0D14F0; display: grid; place-items: center; text-align: center; padding: 24px; z-index: 5; }
+.overlay p { color: var(--muted); max-width: 30ch; margin: 8px auto 0; }
+.overlay b { font-family: var(--display); font-size: 20px; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="conn" id="conn" aria-label="Connection"></span>
+    <div class="title"><b id="song">Beat Pads</b><span id="meta">CONNECTING…</span></div>
+    <div class="beats" id="beats" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <div class="pads melody" id="pads"></div>
+
+  <div class="bar">
+    <div class="seg" role="group" aria-label="Pad mode">
+      <button id="m-melody" aria-pressed="true">Melody</button>
+      <button id="m-drums" aria-pressed="false">Drums</button>
+    </div>
+    <button class="btn" id="down" aria-label="Octave down">−</button>
+    <span class="oct" id="oct">OCT 0</span>
+    <button class="btn" id="up" aria-label="Octave up">+</button>
+    <span class="spacer"></span>
+    <button class="btn rec" id="rec" aria-pressed="false">● Rec</button>
+    <button class="btn play" id="play" aria-pressed="false" aria-label="Play or stop">▶</button>
+  </div>
+
+  <div class="overlay" id="overlay"><div><b>Connecting to the studio…</b><p>Keep the AI Beat Studio app open on the computer, on the same Wi-Fi or plugged in by USB.</p></div></div>
+
+<script>
+const NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+const DRUMS = [
+  { pitch: 36, label: "Kick" }, { pitch: 38, label: "Snare" }, { pitch: 39, label: "Clap" },
+  { pitch: 42, label: "Hat" }, { pitch: 46, label: "Open hat" }, { pitch: 49, label: "Crash" },
+];
+const S = { root: 57, scale: [0, 2, 3, 5, 7, 8, 10], mode: "melody", shift: 0, playing: false, recording: false };
+const $ = (id) => document.getElementById(id);
+let ws = null;
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { $("conn").classList.add("on"); $("overlay").hidden = true; };
+  ws.onclose = () => { $("conn").classList.remove("on"); $("overlay").hidden = false; setTimeout(connect, 1000); };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === "state") {
+      Object.assign(S, { root: m.root ?? S.root, scale: m.scale ?? S.scale, playing: !!m.playing, recording: !!m.recording });
+      $("song").textContent = m.title || "Beat Pads";
+      $("meta").textContent = [m.moodLabel, m.bpm && m.bpm + " BPM", m.key].filter(Boolean).join(" · ").toUpperCase();
+      $("rec").setAttribute("aria-pressed", String(S.recording));
+      $("play").setAttribute("aria-pressed", String(S.playing));
+      $("play").textContent = S.playing ? "■" : "▶";
+      render();
+    } else if (m.type === "beat") {
+      [...$("beats").children].forEach((el, i) => { el.classList.toggle("on", i === m.n % 4); el.classList.toggle("down", i === 0); });
+    }
+  };
+}
+const send = (m) => { if (ws?.readyState === 1) ws.send(JSON.stringify(m)); };
+
+function melodyPitch(i) {
+  const len = S.scale.length;
+  return S.root + S.shift + S.scale[i % len] + 12 * Math.floor(i / len);
+}
+
+function render() {
+  const grid = $("pads");
+  grid.className = "pads " + S.mode;
+  let pads;
+  if (S.mode === "drums") pads = DRUMS.map((d) => ({ pitch: d.pitch, big: d.label, small: "", root: false }));
+  else {
+    const landscape = matchMedia("(orientation: landscape)").matches;
+    const cols = landscape ? 8 : 4, rows = landscape ? 2 : 4;
+    pads = [];
+    // Low notes at the bottom-left, like a real pad controller.
+    for (let r = rows - 1; r >= 0; r--) for (let c = 0; c < cols; c++) {
+      const i = r * cols + c, p = melodyPitch(i);
+      pads.push({ pitch: p, big: NAMES[p % 12], small: String(Math.floor(p / 12) - 1), root: (p - S.root) % 12 === 0 });
+    }
+  }
+  grid.innerHTML = "";
+  for (const p of pads) {
+    const el = document.createElement("button");
+    el.className = "pad" + (p.root ? " root" : "");
+    el.dataset.pitch = p.pitch;
+    el.innerHTML = `<b></b><small></small>`;
+    el.querySelector("b").textContent = p.big;
+    el.querySelector("small").textContent = p.small;
+    grid.appendChild(el);
+  }
+  $("oct").textContent = "OCT " + (S.shift > 0 ? "+" : "") + S.shift / 12;
+}
+
+// Multi-touch: each finger is its own note-on / note-off.
+const down = new Map();
+$("pads").addEventListener("pointerdown", (e) => {
+  const pad = e.target.closest(".pad");
+  if (!pad) return;
+  e.preventDefault();
+  pad.setPointerCapture(e.pointerId);
+  const pitch = Number(pad.dataset.pitch);
+  down.set(e.pointerId, { pad, pitch, t: performance.now() });
+  pad.classList.add("on");
+  send({ type: "note", on: true, pitch, vel: 0.9, kind: S.mode });
+  navigator.vibrate?.(12);
+});
+const release = (e) => {
+  const d = down.get(e.pointerId);
+  if (!d) return;
+  down.delete(e.pointerId);
+  d.pad.classList.remove("on");
+  send({ type: "note", on: false, pitch: d.pitch, kind: S.mode, ms: Math.round(performance.now() - d.t) });
+};
+["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) => $("pads").addEventListener(ev, release));
+
+const setMode = (m) => { S.mode = m; $("m-melody").setAttribute("aria-pressed", String(m === "melody")); $("m-drums").setAttribute("aria-pressed", String(m === "drums")); render(); };
+$("m-melody").onclick = () => setMode("melody");
+$("m-drums").onclick = () => setMode("drums");
+$("down").onclick = () => { S.shift = Math.max(-24, S.shift - 12); render(); };
+$("up").onclick = () => { S.shift = Math.min(12, S.shift + 12); render(); };
+$("rec").onclick = () => send({ type: "transport", action: "rec" });
+$("play").onclick = () => send({ type: "transport", action: S.playing ? "stop" : "play" });
+matchMedia("(orientation: landscape)").addEventListener("change", render);
+try { navigator.wakeLock?.request("screen").catch(() => {}); } catch (_) {}
+
+render();
+connect();
+</script>
+</body>
+</html>

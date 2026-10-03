@@ -26,7 +26,7 @@ for (const f of files) {
 
 // Each module must keep exporting the functions other modules rely on.
 const REQUIRED = {
-  "src/pianoroll/index.js": ["mount", "getNotes", "setTracks", "screenshot", "setPlayhead", "setMood", "clear"],
+  "src/pianoroll/index.js": ["mount", "getNotes", "setTracks", "screenshot", "setPlayhead", "setMood", "clear", "hit", "setLength"],
   "src/audio/index.js": ["init", "loadProject", "play", "stop", "setBpm", "playNote", "getBeat", "addClip", "updateClip", "previewClip", "onNote", "getSpectrum", "TONES"],
   "src/voice/index.js": ["mountPanel", "showResult"],
   "src/visuals/index.js": ["mount", "setPalette", "pulse", "setTitle", "setTracks", "setMeta", "noteOn", "beat", "setSpectrumSource", "setClock", "setCooking"],

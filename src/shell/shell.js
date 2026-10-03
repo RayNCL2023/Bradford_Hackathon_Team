@@ -14,7 +14,13 @@ let recording = false;
 let playing = false;
 
 const status = (text, busy = false) => { $("status").textContent = text; $("status").classList.toggle("busy", busy); };
-const userTrack = () => project.tracks.find((t) => t.source === "user");
+const userTrack = () => project.tracks.find((t) => t.id === "user");
+// Drums tapped on the phone are recorded into their own track.
+const userDrums = () => {
+  let t = project.tracks.find((x) => x.id === "user-drums");
+  if (!t) { t = { id: "user-drums", name: "Your drums", type: "drums", source: "user", notes: [] }; project.tracks.splice(1, 0, t); renderTracks(); }
+  return t;
+};
 
 // ---- Moods ----
 $("moods").innerHTML = Object.entries(MOODS)
@@ -29,6 +35,7 @@ $("moods").addEventListener("click", (e) => {
   $("bpm").value = project.bpm;
   audio.setBpm(project.bpm);
   refreshVisuals();
+  syncPhones();
   status(`${MOODS[mood].label} mood: ${project.bpm} BPM. Every key now plays notes that fit.`);
 });
 
@@ -88,12 +95,14 @@ async function play() {
   audio.loadProject(project);
   audio.play();
   playing = true;
+  syncPhones();
 }
-function stop() { audio.stop(); playing = false; roll.setPlayhead(-1); }
+function stop() { audio.stop(); playing = false; roll.setPlayhead(-1); syncPhones(); }
 $("play").onclick = play;
 $("stop").onclick = stop;
-$("rec").onclick = () => { recording = !recording; $("rec").setAttribute("aria-pressed", String(recording)); if (recording && !playing) play(); };
-$("bpm").onchange = () => { project.bpm = Math.min(200, Math.max(60, Number($("bpm").value) || 124)); audio.setBpm(project.bpm); };
+function toggleRec() { recording = !recording; $("rec").setAttribute("aria-pressed", String(recording)); if (recording && !playing) play(); else syncPhones(); }
+$("rec").onclick = toggleRec;
+$("bpm").onchange = () => { project.bpm = Math.min(200, Math.max(60, Number($("bpm").value) || 124)); audio.setBpm(project.bpm); syncPhones(); };
 $("clear").onclick = () => roll.clear();
 window.addEventListener("keydown", (e) => {
   if (e.target?.closest?.("input, textarea")) return;
@@ -108,7 +117,7 @@ let lastBeat = -1;
   const beat = audio.getBeat();
   roll.setPlayhead(beat % (project.bars * 4));
   const whole = Math.floor(beat);
-  if (whole !== lastBeat) { lastBeat = whole; visuals.beat(whole % (project.bars * 4)); }
+  if (whole !== lastBeat) { lastBeat = whole; visuals.beat(whole % (project.bars * 4)); window.api.remote?.beat(whole); }
 })();
 
 // ---- The magic button ----
@@ -127,7 +136,8 @@ $("produce").onclick = async () => {
   try {
     /** @type {import("../shared/contracts.js").AiResult} */
     const result = await window.api.produce({ bpm: project.bpm, bars: project.bars, userNotes, screenshotPng: roll.screenshot(), mood });
-    project.tracks = [userTrack(), ...result.tracks];
+    project.tracks = [...project.tracks.filter((t) => t.source === "user"), ...result.tracks];
+    songTitle = result.title;
     renderTracks();
     roll.setTracks(project.tracks);
     visuals.setPalette(result.palette);
@@ -145,3 +155,52 @@ $("produce").onclick = async () => {
     $("produce").disabled = false;
   }
 };
+
+// ---- Phone pads (Wi-Fi or USB) ----
+let songTitle = "";
+function syncPhones() {
+  const m = MOODS[mood];
+  window.api.remote?.setState({ title: songTitle, mood, moodLabel: m.label, key: m.key, root: m.root, scale: m.scale, bpm: project.bpm, playing, recording });
+}
+const held = new Map(); // pitch -> { note, t }
+window.api.remote?.onMessage(async (msg) => {
+  if (msg.type === "note") {
+    await audio.init();
+    if (msg.kind === "drums") {
+      if (!msg.on) return;
+      audio.playNote(msg.pitch, "drums");
+      if (recording && playing) {
+        userDrums().notes.push({ pitch: msg.pitch, start: (Math.round(audio.getBeat() * 4) / 4) % (project.bars * 4), dur: 0.25, vel: msg.vel ?? 0.9 });
+        audio.loadProject(project);
+        refreshVisuals();
+      }
+    } else if (msg.on) {
+      held.set(msg.pitch, { note: roll.hit(msg.pitch), t: performance.now() });
+    } else {
+      const h = held.get(msg.pitch);
+      held.delete(msg.pitch);
+      if (h?.note) roll.setLength(h.note, ((msg.ms ?? performance.now() - h.t) / 1000) * (project.bpm / 60));
+    }
+  } else if (msg.type === "transport") {
+    if (msg.action === "play") play();
+    else if (msg.action === "stop") stop();
+    else if (msg.action === "rec") toggleRec();
+  }
+});
+window.api.remote?.onClients((n) => {
+  $("phoneDot").classList.toggle("on", n > 0);
+  $("phoneLabel").textContent = n ? (n === 1 ? "Phone connected" : `${n} phones connected`) : "Connect phone";
+  $("phoneCount").textContent = n ? `${n} phone${n > 1 ? "s" : ""} connected. Start tapping!` : "No phones connected yet.";
+  if (n) { syncPhones(); status(n === 1 ? "Phone connected. Tap the pads to play the studio." : `${n} phones connected.`); }
+});
+async function openPhoneDialog() {
+  $("phoneDialog").showModal();
+  const info = await window.api.remote.info();
+  $("qr").src = info.qr;
+  $("wifiUrl").textContent = info.wifiUrl || "No Wi-Fi network found";
+  $("usbState").textContent = !info.usb.adb ? "USB needs Android platform tools (adb) on this computer."
+    : info.usb.linked ? `Phone plugged in and linked over USB (${info.usb.devices}).`
+    : "No phone found on USB yet.";
+}
+$("phoneBtn").onclick = openPhoneDialog;
+syncPhones();

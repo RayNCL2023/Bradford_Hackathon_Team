@@ -69,3 +69,19 @@ kbd { font: 600 11px var(--body); background: var(--bg); border: 1px solid var(-
 .tones { display: flex; flex-wrap: wrap; gap: 4px; }
 .tone { font: 600 11px var(--body); padding: 4px 9px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); cursor: pointer; }
 .tone[aria-pressed="true"] { background: var(--cyan); color: #04131a; border-color: var(--cyan); }
+
+.btn.phone { display: inline-flex; align-items: center; gap: 8px; }
+.phone-dot { width: 9px; height: 9px; border-radius: 99px; background: #555c70; }
+.phone-dot.on { background: #5ee6a8; box-shadow: 0 0 8px #5ee6a8; }
+.phone-dialog { border: 1px solid var(--line); border-radius: 18px; background: var(--panel); color: var(--text); padding: 0; max-width: 720px; width: calc(100% - 32px); }
+.phone-dialog::backdrop { background: #000a; }
+.pd-inner { padding: 22px; display: grid; gap: 14px; }
+.pd-inner h2 { margin: 0; font: 800 20px var(--display); }
+.pd-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.pd-col { background: var(--panel-2); border-radius: 14px; padding: 14px; display: grid; gap: 8px; align-content: start; }
+.pd-col h3 { margin: 0; font: 600 12px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.pd-col img { border-radius: 10px; background: #f3efe6; justify-self: start; }
+.pd-col p, .pd-col ol { margin: 0; color: var(--muted); font-size: 13px; }
+.pd-col ol { padding-left: 18px; display: grid; gap: 4px; }
+.pd-col code { font-size: 12px; color: var(--cyan); word-break: break-all; }
+.pd-count { margin: 0; font-size: 13px; color: var(--muted); }
