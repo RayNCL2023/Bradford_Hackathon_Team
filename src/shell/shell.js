@@ -100,7 +100,14 @@ $("produce").onclick = async () => {
   const userNotes = roll.getNotes();
   if (!userNotes.length) { status("Tap out a beat first: press Rec, then ▶, and hit some keys."); return; }
   $("produce").disabled = true;
-  status("The AI producer is listening to your beat…", true);
+  const lines = ["Listening to your beat", "Finding the groove", "Cooking up the drums", "Laying down the bass", "Adding some sparkle", "Naming your track"];
+  const t0 = Date.now();
+  const cook = setInterval(() => {
+    const secs = Math.round((Date.now() - t0) / 1000);
+    status(`${lines[Math.min(lines.length - 1, Math.floor(secs / 3))]}… ${secs}s`, true);
+    visuals.pulse(0.3);
+  }, 500);
+  status("Listening to your beat…", true);
   try {
     /** @type {import("../shared/contracts.js").AiResult} */
     const result = await window.api.produce({ bpm: project.bpm, bars: project.bars, userNotes, screenshotPng: roll.screenshot(), mood });
@@ -116,6 +123,7 @@ $("produce").onclick = async () => {
   } catch (err) {
     status("Something went wrong: " + err.message);
   } finally {
+    clearInterval(cook);
     $("produce").disabled = false;
   }
 };

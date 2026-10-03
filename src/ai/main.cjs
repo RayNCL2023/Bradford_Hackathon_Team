@@ -14,21 +14,22 @@ let MOODS = null;
 const loadMoods = async () => (MOODS ??= (await import(pathToFileURL(path.join(__dirname, "../shared/contracts.js")).href)).MOODS);
 
 // ---------- Prompt ----------
+// SPEED: the model writes ONE BAR per instrument plus a 4-bar chord progression; code repeats and transposes it.
+// That is ~4x fewer tokens than writing every note (a full track went from ~48 s to well under 20 s).
 function buildPrompt(req, mood) {
-  const bars = req.bars || 4, total = bars * 4;
+  const bars = req.bars || 4;
   const riff = (req.userNotes || []).slice(0, 120).map((n) => [n.pitch, n.start, n.dur]);
-  return `You are an expert dance-music producer inside a beginner-friendly beat app. The user has no music knowledge: they tapped a short riff. Turn it into a catchy, energetic ${bars}-bar loop that sounds great on repeat.
+  return `You are an expert dance-music producer in a beginner-friendly beat app. The user tapped a riff with no music knowledge. Make it a catchy ${bars}-bar loop.
 
-Mood: ${mood.label}. Key/scale: root MIDI ${mood.root}, scale intervals ${JSON.stringify(mood.scale)}. Tempo: ${req.bpm} BPM, 4/4, ${bars} bars = beats 0 to ${total}.
-User riff as [midiPitch, startBeat, lengthBeats]: ${JSON.stringify(riff)}
-${req.instruction ? `The user asks: "${String(req.instruction).slice(0, 200)}". Apply it.` : ""}
-${req.screenshotPng ? "An image of the piano roll is attached: the pink notes are the user's riff." : ""}
+Mood: ${mood.label}. Scale: root MIDI ${mood.root}, intervals ${JSON.stringify(mood.scale)}. ${req.bpm} BPM, 4/4.
+User riff [pitch, startBeat, lengthBeats] over beats 0-${bars * 4}: ${JSON.stringify(riff)}
+${req.instruction ? `The user asks: "${String(req.instruction).slice(0, 200)}". Apply it.` : ""}${req.screenshotPng ? "\nThe attached image is the piano roll; pink notes are the user's riff." : ""}
 
-Write 3 to 5 backing tracks that support the riff: always drums and bass, plus 1-3 of pad, lead, pluck. Keep every pitched note inside the scale. Drums use pitches 36 kick, 38 snare, 39 clap, 42 closed hat, 46 open hat. Starts must be in [0, ${total}), on 1/16 steps (multiples of 0.25). Lengths > 0. Velocity 0.3-1. Make the groove fit the mood. Add variation in the last bar (a fill or turnaround).
+Write each instrument as ONE BAR only (beats 0 to 4, starts on multiples of 0.25). The app repeats it for every bar and moves pitched parts along "progression" (scale steps added to every note, one number per bar, first is 0). Always include drums and bass, plus 1-3 of pad, lead, pluck. Pitched notes in the scale. Drums: 36 kick, 38 snare, 39 clap, 42 closed hat, 46 open hat. Give drums a "fill" bar for the last bar.
 
-Reply with ONLY this JSON, no prose, no markdown:
-{"title": "catchy 2-5 word song name", "palette": ["#hex","#hex","#hex"], "tracks": [{"name": "AI Drums", "type": "drums|bass|pad|lead|pluck", "notes": [[pitch, start, length, velocity]]}], "vocalIdeas": [{"lyric": "short ad-lib or hook", "style": "how to sing or say it, e.g. hype male shout, breathy female hook", "bar": 1, "reason": "one line"}], "timelineTips": [{"bar": 1, "tip": "one practical, beginner-friendly suggestion"}]}
-Give exactly 3 vocalIdeas and 2-3 timelineTips. The palette is 3 vivid colours that match the mood.`;
+Reply with ONLY compact JSON, no prose:
+{"title":"2-5 word catchy name","palette":["#hex","#hex","#hex"],"progression":[0,s,s,s],"tracks":[{"name":"AI Drums","type":"drums","pattern":[[pitch,start,length,velocity]],"fill":[[pitch,start,length,velocity]]},{"name":"Bass","type":"bass|pad|lead|pluck","pattern":[[pitch,start,length,velocity]]}],"vocalIdeas":[{"lyric":"short ad-lib or hook","style":"e.g. hype male shout, breathy female hook","bar":1,"reason":"one line"}],"timelineTips":[{"bar":1,"tip":"one beginner-friendly suggestion"}]}
+Exactly 3 vocalIdeas, 2-3 timelineTips, palette = 3 vivid colours for the mood.`;
 }
 
 // ---------- Parse + clean ----------
@@ -41,23 +42,55 @@ function extractJson(text) {
   return JSON.parse(body.slice(a, b + 1));
 }
 
+const inScale = (p, mood) => mood.scale.includes((((p - mood.root) % 12) + 12) % 12);
 function snapToScale(pitch, mood) {
-  for (let d = 0; d < 7; d++) for (const p of [pitch - d, pitch + d]) {
-    if (mood.scale.includes((((p - mood.root) % 12) + 12) % 12)) return p;
-  }
+  for (let d = 0; d < 7; d++) for (const p of [pitch - d, pitch + d]) if (inScale(p, mood)) return p;
   return pitch;
 }
 
+/** Move an in-scale pitch up/down by `steps` scale degrees (so chords stay in key). */
+function moveByDegrees(pitch, steps, mood) {
+  if (!steps) return pitch;
+  const len = mood.scale.length, rel = pitch - mood.root;
+  const oct = Math.floor(rel / 12), semi = ((rel % 12) + 12) % 12;
+  let idx = mood.scale.indexOf(semi);
+  if (idx < 0) return pitch;
+  idx += oct * len + Math.round(steps);
+  return mood.root + 12 * Math.floor(idx / len) + mood.scale[((idx % len) + len) % len];
+}
+
+const toNote = (n) => (Array.isArray(n) ? { pitch: n[0], start: n[1], dur: n[2], vel: n[3] } : n);
+const tidy = (n) => ({ pitch: Math.round(Number(n.pitch)), start: Math.round(Number(n.start) * 4) / 4, dur: Number(n.dur), vel: Math.min(1, Math.max(0.2, Number(n.vel) || 0.8)) });
+
+/** Turn one track from the reply into full-length notes. Accepts the 1-bar "pattern" form or a full "notes" list. */
+function expandTrack(t, type, mood, bars, progression) {
+  const total = bars * 4;
+  if (Array.isArray(t.pattern)) {
+    const bar1 = t.pattern.slice(0, 64).map(toNote).map(tidy).filter((n) => n.start >= 0 && n.start < 4 && n.dur > 0);
+    const fill = Array.isArray(t.fill) ? t.fill.slice(0, 64).map(toNote).map(tidy).filter((n) => n.start >= 0 && n.start < 4 && n.dur > 0) : null;
+    const out = [];
+    for (let b = 0; b < bars; b++) {
+      const src = b === bars - 1 && fill?.length ? fill : bar1;
+      const shift = type === "drums" ? 0 : Number(progression[b % progression.length]) || 0;
+      for (const n of src) {
+        const pitch = type === "drums" ? n.pitch : moveByDegrees(snapToScale(n.pitch, mood), shift, mood);
+        out.push({ ...n, pitch, start: b * 4 + n.start, dur: Math.min(n.dur, 4 - n.start) });
+      }
+    }
+    return out;
+  }
+  return (Array.isArray(t.notes) ? t.notes : []).slice(0, 500).map(toNote).map(tidy)
+    .filter((n) => n.start >= 0 && n.start < total && n.dur > 0)
+    .map((n) => ({ ...n, dur: Math.min(n.dur, total - n.start), pitch: type === "drums" ? n.pitch : snapToScale(n.pitch, mood) }));
+}
+
 function clean(raw, req, mood, source) {
-  const bars = req.bars || 4, total = bars * 4;
+  const bars = req.bars || 4;
   if (!raw || !Array.isArray(raw.tracks)) throw new Error("reply has no tracks");
+  const progression = Array.isArray(raw.progression) && raw.progression.length ? raw.progression.slice(0, 16) : [0];
   const tracks = raw.tracks.slice(0, 6).map((t, i) => {
     const type = TYPES.includes(t.type) ? t.type : "lead";
-    const notes = (Array.isArray(t.notes) ? t.notes : []).slice(0, 500)
-      .map((n) => (Array.isArray(n) ? { pitch: n[0], start: n[1], dur: n[2], vel: n[3] } : n))
-      .map((n) => ({ pitch: Math.round(Number(n.pitch)), start: Math.round(Number(n.start) * 4) / 4, dur: Number(n.dur), vel: Math.min(1, Math.max(0.2, Number(n.vel) || 0.8)) }))
-      .filter((n) => n.pitch >= 24 && n.pitch <= 108 && n.start >= 0 && n.start < total && n.dur > 0)
-      .map((n) => ({ ...n, dur: Math.min(n.dur, total - n.start), pitch: type === "drums" ? n.pitch : snapToScale(n.pitch, mood) }));
+    const notes = expandTrack(t, type, mood, bars, progression).filter((n) => n.pitch >= 24 && n.pitch <= 108);
     return { id: `ai-${type}-${i}`, name: String(t.name || `AI ${type}`).slice(0, 24), type, source: "ai", notes };
   }).filter((t) => t.notes.length);
   if (!tracks.length) throw new Error("reply had no usable notes");
@@ -126,10 +159,10 @@ async function askGemini(prompt, req) {
   // Gemma 4 on the API "thinks" by default, which took ~3 minutes and used up the reply. Minimal thinking answers in seconds.
   const call = (config) => gemini.models.generateContent({ model, contents: [{ role: "user", parts }], config });
   let res;
-  try { res = await call({ temperature: 0.8, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: "minimal" } }); }
+  try { res = await call({ temperature: 0.8, maxOutputTokens: 4096, thinkingConfig: { thinkingLevel: "minimal" } }); }
   catch (e) {
     if (!/thinking/i.test(e.message)) throw e;
-    res = await call({ temperature: 0.8, maxOutputTokens: 8192 }); // model without thinking controls
+    res = await call({ temperature: 0.8, maxOutputTokens: 4096 }); // model without thinking controls
   }
   if (!res.text) throw new Error(`empty reply (finish reason: ${res.candidates?.[0]?.finishReason || "unknown"})`);
   return res.text;
@@ -220,4 +253,4 @@ async function produce(req) {
   return { ...mockResult(req), note: problems.length ? `AI unavailable (${problems[problems.length - 1].slice(0, 140)}), so this is the demo track.` : "No AI connected yet (set OLLAMA_MODEL or GEMINI_API_KEY in .env), so this is the demo track." };
 }
 
-module.exports = { produce, mockResult, buildPrompt, clean, extractJson };
+module.exports = { produce, mockResult, buildPrompt, clean, extractJson, moveByDegrees };
