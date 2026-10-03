@@ -1,14 +1,26 @@
 // VOCALS (main process side). Owner: Person 5.
 // Export (keep this name): makeVocalClips(ideas, saveDir) -> VocalClip[]
 // Turns the AI's vocal ideas into short audio clips with ElevenLabs, plus a sound effect when asked.
+//
+// CREDIT SAVING (ElevenLabs bills per character / per second of sound effect):
+// - Clips are only made when the user clicks "Make clip" (the page asks for one idea at a time).
+// - Same lyric + style = the saved mp3 is reused, never paid for twice (cache in saveDir/vocals/cache).
+// - Hard caps per app session: ELEVENLABS_MAX_CHARS (default 600) and ELEVENLABS_MAX_SFX (default 3).
+// - ELEVENLABS_MOCK=1 makes a free beep instead of calling the API (use it while building the UI).
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 const API = "https://api.elevenlabs.io/v1";
 const key = () => process.env.ELEVENLABS_API_KEY;
 const headers = () => ({ "xi-api-key": key(), "Content-Type": "application/json" });
 
 let voicesCache = null;
+const spent = { chars: 0, sfx: 0 };
+const maxChars = () => Number(process.env.ELEVENLABS_MAX_CHARS) || 600;
+const maxSfx = () => Number(process.env.ELEVENLABS_MAX_SFX ?? 3);
+const mock = () => process.env.ELEVENLABS_MOCK === "1";
+const SFX_SECONDS = 2;
 
 /** The account's voices, fetched once. */
 async function listVoices() {
@@ -65,7 +77,7 @@ async function speak(voiceId, lyric, style) {
 }
 
 /** Sound effect from a text prompt ("riser build-up", "crowd cheering"). Returns an mp3 Buffer. */
-async function soundEffect(prompt, seconds = 3) {
+async function soundEffect(prompt, seconds = SFX_SECONDS) {
   const res = await fetch(`${API}/sound-generation`, { method: "POST", headers: headers(), body: JSON.stringify({ text: prompt, duration_seconds: seconds, prompt_influence: 0.6 }) });
   if (!res.ok) throw new Error(await errorText(res));
   return Buffer.from(await res.arrayBuffer());
@@ -74,39 +86,74 @@ async function soundEffect(prompt, seconds = 3) {
 // Ideas whose style asks for an effect, not a voice.
 const isEffect = (style) => /\b(sfx|sound effect|riser|sweep|impact|crowd noise|cheer|drop fx)\b/i.test(style);
 
-function save(buf, saveDir, name) {
-  const dir = path.join(saveDir, "vocals");
+const cacheFile = (saveDir, idea) => {
+  const dir = path.join(saveDir, "vocals", "cache");
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${name}-${Date.now()}.mp3`);
-  fs.writeFileSync(file, buf);
-  // Data URL so the page can play and load it into Tone.js without file:// fetch restrictions.
-  return { file, url: `data:audio/mpeg;base64,${buf.toString("base64")}` };
+  const hash = crypto.createHash("sha1").update(`${idea.lyric.trim().toLowerCase()}|${idea.style.trim().toLowerCase()}`).digest("hex").slice(0, 16);
+  return path.join(dir, `${hash}.mp3`);
+};
+// Data URL so the page can play and load it into Tone.js without file:// fetch restrictions.
+const toUrl = (buf, mime = "audio/mpeg") => `data:${mime};base64,${buf.toString("base64")}`;
+
+/** A free 0.4 s beep as a WAV, used in mock mode. */
+function beepWav() {
+  const rate = 22050, n = Math.floor(rate * 0.4), data = Buffer.alloc(n * 2);
+  for (let i = 0; i < n; i++) data.writeInt16LE(Math.round(Math.sin(i / rate * 2 * Math.PI * 660) * 8000 * (1 - i / n)), i * 2);
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0); h.writeUInt32LE(36 + data.length, 4); h.write("WAVEfmt ", 8); h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22); h.writeUInt32LE(rate, 24); h.writeUInt32LE(rate * 2, 28);
+  h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write("data", 36); h.writeUInt32LE(data.length, 40);
+  return Buffer.concat([h, data]);
 }
 
 /**
+ * Make clips for the given ideas. The page calls this with ONE idea per "Make clip" click.
  * @param {import("../shared/contracts.js").VocalIdea[]} ideas
  * @param {string} saveDir
  * @returns {Promise<import("../shared/contracts.js").VocalClip[]>}
  */
 async function makeVocalClips(ideas, saveDir) {
-  const empty = (v, error) => ({ id: `clip-${v.id}`, ideaId: v.id, lyric: v.lyric, url: "", reason: v.reason, error });
-  if (!key()) return ideas.map((v) => empty(v, "Add ELEVENLABS_API_KEY to .env to make audio"));
+  const base = (v) => ({ id: `clip-${v.id}`, ideaId: v.id, lyric: v.lyric, reason: v.reason });
+  const empty = (v, error) => ({ ...base(v), url: "", error });
+
+  if (mock()) return ideas.map((v) => ({ ...base(v), url: toUrl(beepWav(), "audio/wav"), note: "Test beep (ELEVENLABS_MOCK=1, no credit used)" }));
+
+  // Free first: anything already made is reused from the cache.
+  const todo = [];
+  const out = ideas.map((v) => {
+    const f = cacheFile(saveDir, v);
+    if (fs.existsSync(f)) return { ...base(v), url: toUrl(fs.readFileSync(f)), file: f, note: "Reused saved clip (no credit used)" };
+    todo.push(v);
+    return null;
+  });
+  if (!todo.length) return out;
+  if (!key()) return out.map((c, i) => c || empty(ideas[i], "Add ELEVENLABS_API_KEY to .env to make audio"));
 
   let voices = [];
-  try { voices = await listVoices(); } catch (e) { return ideas.map((v) => empty(v, e.message)); }
+  try { voices = await listVoices(); } catch (e) { return out.map((c, i) => c || empty(ideas[i], e.message)); }
 
-  // All clips in parallel so the panel fills quickly.
-  return Promise.all(ideas.map(async (v, i) => {
+  for (let i = 0; i < ideas.length; i++) {
+    if (out[i]) continue;
+    const v = ideas[i];
+    const sfx = isEffect(v.style);
+    if (sfx && spent.sfx >= maxSfx()) { out[i] = empty(v, `Sound-effect limit reached (${maxSfx()} this session). Raise ELEVENLABS_MAX_SFX to allow more.`); continue; }
+    if (!sfx && spent.chars + v.lyric.length > maxChars()) { out[i] = empty(v, `Credit cap reached (${maxChars()} characters this session). Raise ELEVENLABS_MAX_CHARS to allow more.`); continue; }
     try {
-      const buf = isEffect(v.style)
+      const buf = sfx
         ? await soundEffect(`${v.lyric}, ${v.style}, for a dance track`)
-        : await speak(pickVoice(voices, v.style, i).voice_id, v.lyric, v.style);
-      const { file, url } = save(buf, saveDir, v.id);
-      return { id: `clip-${v.id}`, ideaId: v.id, lyric: v.lyric, url, file, reason: v.reason };
+        : await speak(pickVoice(voices, v.style, i).voice_id, v.lyric.slice(0, 80), v.style);
+      if (sfx) spent.sfx++; else spent.chars += Math.min(80, v.lyric.length);
+      const f = cacheFile(saveDir, v);
+      fs.writeFileSync(f, buf);
+      out[i] = { ...base(v), url: toUrl(buf), file: f, note: sfx ? `Sound effect (${spent.sfx}/${maxSfx()} this session)` : `${spent.chars}/${maxChars()} characters used this session` };
     } catch (e) {
-      return empty(v, e.message);
+      out[i] = empty(v, e.message);
     }
-  }));
+  }
+  return out;
 }
 
-module.exports = { makeVocalClips, soundEffect, pickVoice, performance };
+/** What has been spent this session, for showing in the UI. */
+function usage() { return { chars: spent.chars, maxChars: maxChars(), sfx: spent.sfx, maxSfx: maxSfx(), mock: mock() }; }
+
+module.exports = { makeVocalClips, soundEffect, pickVoice, performance, usage };

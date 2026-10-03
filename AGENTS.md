@@ -36,8 +36,15 @@ git checkout <your-branch>
 - Never force-push `main`. Never commit `.env` or API keys.
 - If you broke main, fixing it is your top priority.
 
-## 5. Code style
+## 5. Don't burn API credit
+ElevenLabs and Gemini credits are limited and shared by the team.
+- While building or testing, keep `ELEVENLABS_MOCK=1` in `.env` (free beeps) and let the AI module use local Ollama or the mock. Only switch real services on to check the final result.
+- Never call a paid API from a loop, a test script, on page load or on a timer. Only on a user click.
+- Reuse results: cache anything paid for (the voice module already caches clips by lyric + style).
+- Keep requests small: short lyrics, 2-second sound effects, one AI call per button press.
+
+## 6. Code style
 Plain modern JavaScript (ES modules in `src/`, CommonJS only for `*.cjs` main-process files). No frameworks and no build step. Small commits with clear messages. Comment only what isn't obvious.
 
-## 6. Merge points
+## 7. Merge points
 12:15 (merge 1), 13:30 (merge 2), 14:30 (merge 3 = feature freeze, bug fixes only after this).
