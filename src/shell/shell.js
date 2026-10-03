@@ -177,7 +177,7 @@ function renderLanes() {
       <button class="lb" data-clearlane="${esc(key)}" title="Clear this layer">✕</button></span>`;
   const rows = [];
   for (const t of project.tracks) {
-    const icon = t.type === "drums" ? "drum.png" : t.id === "user" ? "Your beat.png" : "";
+    const icon = { drums: "drum.png", bass: "bass.png", lead: "Lead.png", pad: "Pad.png", keys: "Your beat.png" }[t.type] || "";
     const mark = icon ? `<img class="pix" src="../../Icon/${icon}" alt="">` : `<span class="sw" style="background:${TRACK_COLORS[t.type]}"></span>`;
     const by = t.source === "ai" ? "GEMMA" : "YOU";
     const canArm = t.type !== "drums" || t.piece !== undefined;
