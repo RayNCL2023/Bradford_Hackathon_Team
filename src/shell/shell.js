@@ -614,17 +614,22 @@ syncPhones();
 const KIT_PARTS = ["kick", "snare", "clap", "hat", "openHat", "crash"];
 const CAT_LABELS = { kick: "Kicks", snare: "Snares", clap: "Claps", hat: "Hats", openHat: "Open hats", crash: "Crashes", loop: "Loops", bass: "808 / bass", vocal: "Vocals", perc: "Percussion", fx: "FX", other: "Other" };
 let samples = [];
+let sampleQuery = "";
 const kitChoice = {};
 async function loadSamples() {
   const res = await window.api.listSamples?.();
   samples = res?.samples || [];
+  renderSamples();
+}
+function renderSamples() {
   if (!samples.length) {
     $("samples").innerHTML = `<div class="s-empty">Drop a sample pack into the <b>samples</b> folder, then <button class="s-btn" id="rescan">Rescan</button></div>`;
     $("rescan").onclick = loadSamples;
     return;
   }
   const byCat = {};
-  samples.forEach((s, i) => (byCat[s.category] ||= []).push(i));
+  const q = sampleQuery.toLowerCase();
+  samples.forEach((s, i) => { if (!q || s.rel.toLowerCase().includes(q)) (byCat[s.category] ||= []).push(i); });
   // Default kit: the first sample of each drum type.
   for (const part of KIT_PARTS) if (!(part in kitChoice) && byCat[part]) kitChoice[part] = byCat[part][0];
   const row = (i, cat) => {
@@ -634,10 +639,13 @@ async function loadSamples() {
       : isKit ? `<button class="mini${kitChoice[cat] === i ? " on" : ""}" data-kit="${cat}" data-i="${i}">Use</button>` : `<button class="mini" data-addloop="${i}" title="Add once at the current bar">Add</button>`;
     return `<li><button class="nm" data-preview="${i}" title="${esc(s.rel)}">${esc(s.name)}${s.bpm ? ` · ${s.bpm}` : ""}</button>${action}</li>`;
   };
-  $("samples").innerHTML = `<div class="s-head"><button class="s-btn amber" id="useKit">Use pack drums</button><button class="s-btn" id="rescan">Rescan</button></div>` +
+  const focused = document.activeElement?.id === "sampleSearch";
+  $("samples").innerHTML = `<div class="s-head"><button class="s-btn amber" id="useKit">Use pack drums</button><button class="s-btn" id="rescan">Rescan</button></div><input id="sampleSearch" class="s-search" placeholder="Search ${samples.length} sounds (e.g. 170, grunger)" value="${esc(sampleQuery)}" autocomplete="off">` +
     Object.keys(CAT_LABELS).filter((c) => byCat[c]).map((c) =>
       `<details${c === "loop" ? " open" : ""}><summary>${CAT_LABELS[c]}<span>${byCat[c].length}</span></summary><ul>${byCat[c].slice(0, 120).map((i) => row(i, c)).join("")}</ul></details>`).join("");
   $("rescan").onclick = loadSamples;
+  $("sampleSearch").oninput = (e) => { sampleQuery = e.target.value; clearTimeout(loadSamples.t); loadSamples.t = setTimeout(() => renderSamples(), 150); };
+  if (focused) { const i = $("sampleSearch"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
   $("useKit").onclick = async () => {
     const urls = Object.fromEntries(KIT_PARTS.filter((p) => kitChoice[p] !== undefined).map((p) => [p, samples[kitChoice[p]].url]));
     const loaded = await audio.loadKit(urls);

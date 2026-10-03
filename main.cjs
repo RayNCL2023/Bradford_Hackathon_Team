@@ -109,7 +109,7 @@ const AUDIO_EXT = /\.(wav|mp3|ogg|flac|aif|aiff|m4a)$/i;
 /** Guess what a sample is from its file and folder names. */
 function categorise(rel) {
   const s = rel.toLowerCase().replace(/[\\_\-.]/g, " ");
-  if (/\bloops?\b/.test(s)) return "loop";
+  if (/\bloops?\b|\bamen|\bbreaks?\b|breakbeat/.test(s)) return "loop";
   if (/open ?h(i ?)?hat|\bohh?\b|open hat/.test(s)) return "openHat";
   if (/h(i ?)?hat|\bhh\b|\bchh?\b/.test(s)) return "hat";
   if (/kick|\bbd\b|bass ?drum/.test(s)) return "kick";
