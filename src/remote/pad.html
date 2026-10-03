@@ -75,6 +75,8 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; }
     <span class="oct" id="oct">OCT 0</span>
     <button class="btn" id="up" aria-label="Octave up">+</button>
     <span class="spacer"></span>
+    <button class="btn" id="loop" aria-label="Loop length">⟳ 4 bars</button>
+    <button class="btn" id="dbl" aria-label="Double the loop">×2</button>
     <button class="btn rec" id="rec" aria-pressed="false">● Rec</button>
     <button class="btn play" id="play" aria-pressed="false" aria-label="Play or stop">▶</button>
   </div>
@@ -87,7 +89,7 @@ const DRUMS = [
   { pitch: 36, label: "Kick" }, { pitch: 38, label: "Snare" }, { pitch: 39, label: "Clap" },
   { pitch: 42, label: "Hat" }, { pitch: 46, label: "Open hat" }, { pitch: 49, label: "Crash" },
 ];
-const S = { root: 57, scale: [0, 2, 3, 5, 7, 8, 10], mode: "melody", shift: 0, playing: false, recording: false };
+const S = { root: 57, scale: [0, 2, 3, 5, 7, 8, 10], mode: "melody", shift: 0, playing: false, recording: false, bars: 4 };
 const $ = (id) => document.getElementById(id);
 let ws = null;
 
@@ -98,7 +100,8 @@ function connect() {
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === "state") {
-      Object.assign(S, { root: m.root ?? S.root, scale: m.scale ?? S.scale, playing: !!m.playing, recording: !!m.recording });
+      Object.assign(S, { root: m.root ?? S.root, scale: m.scale ?? S.scale, playing: !!m.playing, recording: !!m.recording, bars: m.bars ?? S.bars });
+      $("loop").textContent = "⟳ " + S.bars + (S.bars > 1 ? " bars" : " bar");
       $("song").textContent = m.title || "Beat Pads";
       $("meta").textContent = [m.moodLabel, m.bpm && m.bpm + " BPM", m.key].filter(Boolean).join(" · ").toUpperCase();
       $("rec").setAttribute("aria-pressed", String(S.recording));
@@ -173,6 +176,8 @@ $("m-drums").onclick = () => setMode("drums");
 $("down").onclick = () => { S.shift = Math.max(-24, S.shift - 12); render(); };
 $("up").onclick = () => { S.shift = Math.min(12, S.shift + 12); render(); };
 $("rec").onclick = () => send({ type: "transport", action: "rec" });
+$("loop").onclick = () => { const order = [1, 2, 4, 8]; send({ type: "transport", action: "loop", bars: order[(order.indexOf(S.bars) + 1) % order.length] }); navigator.vibrate?.(10); };
+$("dbl").onclick = () => { send({ type: "transport", action: "double" }); navigator.vibrate?.(10); };
 $("play").onclick = () => send({ type: "transport", action: S.playing ? "stop" : "play" });
 matchMedia("(orientation: landscape)").addEventListener("change", render);
 try { navigator.wakeLock?.request("screen").catch(() => {}); } catch (_) {}

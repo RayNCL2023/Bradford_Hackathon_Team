@@ -18,13 +18,67 @@ let songTitle = "";
 let busy = false;
 
 const status = (text, isBusy = false) => { $("status").textContent = text; $("status").classList.toggle("busy", isBusy); };
-const userTrack = () => project.tracks.find((t) => t.id === "user");
-const userDrums = () => {
-  let t = project.tracks.find((x) => x.id === "user-drums");
-  if (!t) { t = { id: "user-drums", name: "Your drums", type: "drums", source: "user", notes: [] }; project.tracks.splice(1, 0, t); }
-  return t;
-};
 const loopBeats = () => project.bars * 4;
+
+// ---------- Layers ----------
+// Every user part is a layer (track with source "user"). One layer is ARMED: it's what the keys / phone pads record into.
+// Drum layers hold a single piece (layer.piece = MIDI pitch), so a beat can be built one drum at a time.
+const DRUM_PIECES = { 36: "Kick", 38: "Snare", 39: "Clap", 42: "Hat", 46: "Open hat", 49: "Crash" };
+let armedId = "user";
+let solo = null;            // a layer id, or "trackId:pitch" for one drum piece of a producer track
+let abMode = "after";       // "before" = only what you played; "after" = everything
+const expanded = new Set(); // drum tracks shown piece-by-piece in the playlist
+const armed = () => project.tracks.find((t) => t.id === armedId) || project.tracks.find((t) => t.source === "user");
+const userTrack = () => project.tracks.find((t) => t.id === "user");
+const quant = () => Number($("quantize")?.value ?? 0.25);
+const snapBeat = (b) => { const g = quant(); return g ? Math.round(b / g) * g : Math.round(b * 16) / 16; };
+/** The layer for one drum piece, created on first use. */
+function drumLayer(pitch) {
+  const id = `layer-drum-${pitch}`;
+  let t = project.tracks.find((x) => x.id === id);
+  if (!t) {
+    t = { id, name: DRUM_PIECES[pitch] || "Drum", type: "drums", source: "user", piece: pitch, notes: [] };
+    const lastUser = project.tracks.map((x) => x.source).lastIndexOf("user");
+    project.tracks.splice(lastUser + 1, 0, t);
+  }
+  return t;
+}
+function addLayer(kind) {
+  let t;
+  if (/^\d+$/.test(kind)) t = drumLayer(Number(kind));
+  else {
+    const n = project.tracks.filter((x) => x.source === "user" && x.type === kind).length + 1;
+    const label = { keys: "Keys", bass: "Bass", lead: "Lead", pad: "Pad", pluck: "Pluck" }[kind] || "Layer";
+    t = { id: `layer-${kind}-${Date.now()}`, name: `My ${label}${n > 1 ? " " + n : ""}`, type: kind, source: "user", notes: [] };
+    const lastUser = project.tracks.map((x) => x.source).lastIndexOf("user");
+    project.tracks.splice(lastUser + 1, 0, t);
+  }
+  arm(t.id);
+  return t;
+}
+/** Save what the roll is editing back into the armed melodic layer. */
+function syncActive() { const a = armed(); if (a && a.type !== "drums") a.notes = roll.getNotes(); }
+function arm(id) {
+  syncActive();
+  armedId = id;
+  const a = armed();
+  if (a.type !== "drums") roll.setActive(a.id, TRACK_COLORS[a.type], a.notes, project.tracks);
+  refreshAll(false);
+  status(a.type === "drums" ? `${a.name} armed: every key and phone pad now plays the ${a.name.toLowerCase()}. Press Rec to record this layer.`
+    : `${a.name} armed: the keys and phone pads record into this layer.`);
+}
+/** What actually plays: mutes, per-piece mutes, solo and the Before/After switch applied. */
+function view() {
+  const tracks = project.tracks.map((t) => {
+    let notes = t.notes;
+    if (t.mutedPitches?.length) notes = notes.filter((n) => !t.mutedPitches.includes(n.pitch));
+    if (solo) notes = solo === t.id ? notes : solo.startsWith(t.id + ":") ? notes.filter((n) => n.pitch === Number(solo.split(":")[1])) : [];
+    if (abMode === "before" && t.source !== "user") notes = [];
+    return { ...t, notes };
+  });
+  return { ...project, tracks };
+}
+function reload() { audio.loadProject(view()); }
 
 // ---------- Vibes ----------
 $("moods").innerHTML = Object.entries(MOODS)
@@ -51,7 +105,9 @@ roll.mount($("roll"), {
   onNoteOn: async (pitch) => { await audio.init(); audio.playNote(pitch); },
   isRecording: () => recording && playing,
   getBeat: () => audio.getBeat(),
-  onChange: () => { userTrack().notes = roll.getNotes(); audio.loadProject(project); refreshAll(false); },
+  // An armed drum layer takes over the keys: every key plays (and records) that drum piece.
+  intercept: (pitch) => { const a = armed(); if (a?.type === "drums") { drumHit(a.piece ?? 36); return true; } return false; },
+  onChange: () => { syncActive(); reload(); refreshAll(false); },
 });
 visuals.mount($("stage"));
 visuals.setCompact(true);
@@ -94,74 +150,152 @@ function renderLanes() {
   const bars = project.bars;
   $("ruler").style.gridTemplateColumns = `repeat(${bars}, minmax(0, 1fr))`;
   $("ruler").innerHTML = Array.from({ length: bars }, (_, i) => `<span>${i + 1}</span>`).join("");
-  const rows = project.tracks.map((t) => {
-    // A clip for each run of bars that has notes in it.
-    const has = Array.from({ length: bars }, (_, b) => t.notes.some((n) => n.start >= b * 4 && n.start < b * 4 + 4));
-    const clips = [];
+  const cols = `grid-template-columns:repeat(${bars},minmax(0,1fr))`;
+  // Clips = runs of bars that have notes. Each clip has an × that deletes just those bars.
+  const clipsFor = (t, notes, label, key) => {
+    const has = Array.from({ length: bars }, (_, b) => notes.some((n) => n.start >= b * 4 && n.start < b * 4 + 4));
+    const out = [];
     for (let b = 0; b < bars; b++) {
       if (!has[b]) continue;
       let e = b;
       while (e + 1 < bars && has[e + 1]) e++;
-      const ticks = t.notes.filter((n) => n.start >= b * 4 && n.start < (e + 1) * 4).slice(0, 80)
-        .map((n) => {
-          const x = ((n.start - b * 4) / ((e - b + 1) * 4)) * 100;
-          const y = t.type === "drums" ? ({ 36: 70, 38: 40, 39: 45, 42: 15, 46: 20, 49: 10 }[n.pitch] ?? 30) : 85 - Math.min(80, Math.max(0, (n.pitch - 30) * 1.4));
-          return `<i style="left:${x}%;top:${y}%;height:3px"></i>`;
-        }).join("");
-      clips.push(`<div class="clip-block" style="grid-column:${b + 1}/${e + 2};background:${TRACK_COLORS[t.type]}"><span>${esc(t.name)}</span>${ticks}</div>`);
+      const ticks = notes.filter((n) => n.start >= b * 4 && n.start < (e + 1) * 4).slice(0, 80).map((n) => {
+        const x = ((n.start - b * 4) / ((e - b + 1) * 4)) * 100;
+        const y = t.type === "drums" ? ({ 36: 70, 38: 40, 39: 45, 42: 15, 46: 20, 49: 10 }[n.pitch] ?? 30) : 85 - Math.min(80, Math.max(0, (n.pitch - 30) * 1.4));
+        return `<i style="left:${x}%;top:${y}%;height:3px"></i>`;
+      }).join("");
+      out.push(`<div class="clip-block" style="grid-column:${b + 1}/${e + 2};background:${TRACK_COLORS[t.type]}"><span>${esc(label)}</span>${ticks}<button class="clip-x" data-delclip="${esc(key)}" data-from="${b}" data-to="${e}" title="Delete bars ${b + 1}${e > b ? "–" + (e + 1) : ""} of ${esc(label)}">×</button></div>`);
       b = e;
     }
-    const by = t.source === "ai" ? "GEMMA" : t.id === "user-drums" || t.id === "user" ? "YOU" : "";
+    return out.join("");
+  };
+  const btns = (key, opts = {}) => `<span class="lane-btns">
+      ${opts.expand ? `<button class="lb" data-expand="${esc(key)}" title="Show each drum piece">${expanded.has(key) ? "▾" : "▸"}</button>` : ""}
+      <button class="lb${opts.muted ? " on-m" : ""}" data-mute="${esc(key)}" title="Mute">M</button>
+      <button class="lb${solo === key ? " on-s" : ""}" data-solo="${esc(key)}" title="Solo">S</button>
+      ${opts.arm ? `<button class="lb${armedId === key ? " on-a" : ""}" data-arm="${esc(key)}" title="Arm: record and edit this layer">●</button>` : ""}
+      <button class="lb" data-clearlane="${esc(key)}" title="Clear this layer">✕</button></span>`;
+  const rows = [];
+  for (const t of project.tracks) {
     const icon = t.type === "drums" ? "drum.png" : t.id === "user" ? "Your beat.png" : "";
     const mark = icon ? `<img class="pix" src="../../Icon/${icon}" alt="">` : `<span class="sw" style="background:${TRACK_COLORS[t.type]}"></span>`;
-    return `<div class="lane${t.muted ? " muted" : ""}"><button class="lane-name" data-id="${esc(t.id)}" title="Click to mute">${mark}<b>${esc(t.name)}</b><small>${by}</small></button>
-      <div class="lane-clips" style="grid-template-columns:repeat(${bars},minmax(0,1fr))">${clips.join("")}</div></div>`;
-  });
+    const by = t.source === "ai" ? "GEMMA" : "YOU";
+    const canArm = t.type !== "drums" || t.piece !== undefined;
+    rows.push(`<div class="lane${t.muted ? " muted" : ""}${armedId === t.id ? " armed" : ""}">
+      <div class="lane-name"><button class="ln-title" data-edit="${esc(t.id)}" title="Edit this track">${mark}<b>${esc(t.name)}</b><small>${by}</small></button>${btns(t.id, { muted: t.muted, arm: canArm, expand: t.type === "drums" && t.piece === undefined })}</div>
+      <div class="lane-clips" style="${cols}">${clipsFor(t, t.notes, t.name, t.id)}</div></div>`);
+    // A drum track expanded into one sub-lane per piece.
+    if (t.type === "drums" && t.piece === undefined && expanded.has(t.id)) {
+      const pieces = [...new Set(t.notes.map((n) => n.pitch))].sort((a, b) => a - b);
+      for (const p of pieces) {
+        const key = `${t.id}:${p}`;
+        const muted = t.mutedPitches?.includes(p);
+        rows.push(`<div class="lane sub${muted ? " muted" : ""}"><div class="lane-name"><span class="ln-title"><span class="sw" style="background:${TRACK_COLORS.drums}"></span><b>${DRUM_PIECES[p] || "Drum " + p}</b><small></small></span>${btns(key, { muted })}</div>
+          <div class="lane-clips" style="${cols}">${clipsFor(t, t.notes.filter((n) => n.pitch === p), DRUM_PIECES[p] || "Drum", key)}</div></div>`);
+      }
+    }
+  }
   for (const c of project.clips) {
     const bar = Math.floor(c.startBeat / 4);
-    rows.push(`<div class="lane"><div class="lane-name"><span class="sw" style="background:var(--lilac)"></span><b>“${esc(c.name)}”</b><small>11LABS</small></div>
-      <div class="lane-clips" style="grid-template-columns:repeat(${bars},minmax(0,1fr))"><div class="clip-block" style="grid-column:${bar + 1}/${bar + 2};background:var(--lilac)"><span>Vox</span></div></div></div>`);
+    rows.push(`<div class="lane"><div class="lane-name"><span class="ln-title"><span class="sw" style="background:var(--lilac)"></span><b>“${esc(c.name)}”</b><small>AUDIO</small></span></div>
+      <div class="lane-clips" style="${cols}"><div class="clip-block" style="grid-column:${bar + 1}/${bar + 2};background:var(--lilac)"><span>Vox</span></div></div></div>`);
   }
+  rows.push(`<div class="lane add-row"><div class="lane-name"><label class="add-layer">+ Add layer <select id="addLayer" aria-label="Add a layer">
+      <option value="">choose…</option><optgroup label="Drum piece"><option value="36">Kick</option><option value="38">Snare</option><option value="39">Clap</option><option value="42">Hat</option><option value="46">Open hat</option><option value="49">Crash</option></optgroup>
+      <optgroup label="Instrument"><option value="keys">Keys</option><option value="bass">Bass</option><option value="lead">Lead</option><option value="pad">Pad</option><option value="pluck">Pluck</option></optgroup></select></label></div><div></div></div>`);
   $("lanes").innerHTML = rows.join("") + `<div class="playhead-line" id="plHead" hidden></div>`;
   $("lanes").style.position = "relative";
 }
+/** Resolve "trackId" or "trackId:pitch". */
+const keyParts = (key) => { const [id, p] = String(key).split(":"); return { t: project.tracks.find((x) => x.id === id), pitch: p !== undefined ? Number(p) : null }; };
+$("lanes").addEventListener("change", (e) => {
+  if (e.target.id !== "addLayer" || !e.target.value) return;
+  const t = addLayer(e.target.value);
+  explain("STUDIO", `New layer: ${t.name}`, t.type === "drums" ? `Armed. Every key and phone pad now plays the ${t.name.toLowerCase()}, so you can build the beat one drum at a time.` : "Armed. The keys and phone pads record into this layer, and the piano roll edits it.", 4500);
+});
 $("lanes").addEventListener("click", (e) => {
-  const b = e.target.closest("button.lane-name");
+  const b = e.target.closest("button");
   if (!b) return;
-  const t = project.tracks.find((x) => x.id === b.dataset.id);
+  const d = b.dataset;
+  if (d.edit) {
+    const t = project.tracks.find((x) => x.id === d.edit);
+    if (!t) return;
+    if (t.type === "drums") { showTab("rack"); rackTrack = t.id; renderRack(); status(`Editing ${t.name} in the channel rack: click steps to add or remove hits.`); }
+    else { arm(t.id); showTab("roll"); status(`Editing ${t.name} in the piano roll: click to add a note, click a note to delete it.`); }
+    return;
+  }
+  if (d.arm) { arm(d.arm); return; }
+  if (d.expand) { expanded.has(d.expand) ? expanded.delete(d.expand) : expanded.add(d.expand); renderLanes(); return; }
+  if (d.solo) { solo = solo === d.solo ? null : d.solo; reload(); renderLanes(); return; }
+  const key = d.mute || d.clearlane || d.delclip;
+  if (!key) return;
+  const { t, pitch } = keyParts(key);
   if (!t) return;
-  t.muted = !t.muted;
-  audio.loadProject(project);
+  if (d.mute) {
+    if (pitch === null) t.muted = !t.muted;
+    else { t.mutedPitches = t.mutedPitches || []; t.mutedPitches = t.mutedPitches.includes(pitch) ? t.mutedPitches.filter((p) => p !== pitch) : [...t.mutedPitches, pitch]; }
+  } else {
+    // Delete notes: a whole layer / piece, or just the bars of one clip.
+    const from = d.delclip ? Number(d.from) * 4 : -1, to = d.delclip ? (Number(d.to) + 1) * 4 : Infinity;
+    const before = t.notes.length;
+    syncActive();
+    t.notes = t.notes.filter((n) => !((pitch === null || n.pitch === pitch) && n.start >= from && n.start < to));
+    if (armedId === t.id && t.type !== "drums") roll.setActive(t.id, TRACK_COLORS[t.type], t.notes, project.tracks);
+    status(`Deleted ${before - t.notes.length} note${before - t.notes.length === 1 ? "" : "s"} from ${t.name}${pitch !== null ? " (" + (DRUM_PIECES[pitch] || pitch) + ")" : ""}${d.delclip ? ` in bar${d.from === d.to ? " " + (Number(d.from) + 1) : "s " + (Number(d.from) + 1) + "–" + (Number(d.to) + 1)}` : ""}.`);
+  }
+  reload();
   refreshAll();
 });
 
-// ---------- Channel rack (drums, editable) ----------
+// ---------- Channel rack (any drum track, the producer's too) ----------
 const RACK = [["Kick", DRUM_PITCH.kick], ["Snare", DRUM_PITCH.snare], ["Clap", DRUM_PITCH.clap], ["Hat", DRUM_PITCH.closedHat], ["Open hat", DRUM_PITCH.openHat], ["Crash", DRUM_PITCH.crash]];
 let rackBar = 1;
+let rackTrack = "yours"; // "yours" = your drum layers (one per piece), or a producer drum track id
 function renderRack() {
   rackBar = Math.min(rackBar, project.bars);
   const base = (rackBar - 1) * 4;
-  const mine = project.tracks.find((t) => t.id === "user-drums");
-  const ai = project.tracks.filter((t) => t.type === "drums" && t.source === "ai");
-  const hit = (t, pitch, step) => t?.notes.some((n) => n.pitch === pitch && Math.abs(n.start - (base + step / 4)) < 0.01);
+  const aiDrums = project.tracks.filter((t) => t.type === "drums" && t.piece === undefined);
+  if (rackTrack !== "yours" && !aiDrums.some((t) => t.id === rackTrack)) rackTrack = "yours";
+  const editTrack = (pitch) => (rackTrack === "yours" ? project.tracks.find((t) => t.id === `layer-drum-${pitch}`) : project.tracks.find((t) => t.id === rackTrack));
+  const ghosts = rackTrack === "yours" ? aiDrums : project.tracks.filter((t) => t.type === "drums" && t.piece !== undefined);
+  const hitIn = (t, pitch, step) => t?.notes.some((n) => n.pitch === pitch && Math.abs(n.start - (base + step / 4)) < 0.01);
   const barsBtns = Array.from({ length: project.bars }, (_, i) => `<button data-rackbar="${i + 1}" aria-pressed="${i + 1 === rackBar}">BAR ${i + 1}</button>`).join("");
-  $("rack").innerHTML = `<div class="rack-bars">${barsBtns}<span>Amber = yours (tap to change). Dark = the producer's drums.</span></div>` +
+  const sel = `<select id="rackTrack" aria-label="Which drums to edit"><option value="yours"${rackTrack === "yours" ? " selected" : ""}>Your drum layers</option>${aiDrums.map((t) => `<option value="${esc(t.id)}"${rackTrack === t.id ? " selected" : ""}>${esc(t.name)} (producer)</option>`).join("")}</select>`;
+  $("rack").innerHTML = `<div class="rack-bars">${barsBtns}${sel}<button class="tbtn small ghost" id="rackClearBar">Clear bar ${rackBar}</button></div>` +
     RACK.map(([name, pitch]) => `<div class="rack-row"><b>${name}</b>${Array.from({ length: 16 }, (_, s) =>
-      `<button class="step${Math.floor(s / 4) % 2 ? " alt" : ""}${ai.some((t) => hit(t, pitch, s)) ? " ai" : ""}${hit(mine, pitch, s) ? " on" : ""}" data-pitch="${pitch}" data-step="${s}" aria-label="${name} step ${s + 1}"></button>`).join("")}</div>`).join("");
+      `<button class="step${Math.floor(s / 4) % 2 ? " alt" : ""}${ghosts.some((t) => hitIn(t, pitch, s)) ? " ai" : ""}${hitIn(editTrack(pitch), pitch, s) ? " on" : ""}" data-pitch="${pitch}" data-step="${s}" aria-label="${name} step ${s + 1}"></button>`).join("")}</div>`).join("");
 }
+$("rack").addEventListener("change", (e) => { if (e.target.id === "rackTrack") { rackTrack = e.target.value; renderRack(); } });
 $("rack").addEventListener("click", async (e) => {
   const bb = e.target.closest("[data-rackbar]");
   if (bb) { rackBar = Number(bb.dataset.rackbar); renderRack(); return; }
+  if (e.target.id === "rackClearBar") {
+    const from = (rackBar - 1) * 4, to = rackBar * 4;
+    const targets = rackTrack === "yours" ? project.tracks.filter((t) => t.piece !== undefined) : project.tracks.filter((t) => t.id === rackTrack);
+    targets.forEach((t) => (t.notes = t.notes.filter((n) => n.start < from || n.start >= to)));
+    reload(); refreshAll(); status(`Cleared the drums in bar ${rackBar}.`);
+    return;
+  }
   const st = e.target.closest(".step");
   if (!st) return;
   const pitch = Number(st.dataset.pitch), start = (rackBar - 1) * 4 + Number(st.dataset.step) / 4;
-  const t = userDrums();
+  const t = rackTrack === "yours" ? drumLayer(pitch) : project.tracks.find((x) => x.id === rackTrack);
   const i = t.notes.findIndex((n) => n.pitch === pitch && Math.abs(n.start - start) < 0.01);
   if (i >= 0) t.notes.splice(i, 1);
   else { t.notes.push({ pitch, start, dur: 0.25, vel: 0.9 }); await audio.init(); audio.playNote(pitch, "drums"); }
-  audio.loadProject(project);
-  refreshAll(!project.tracks.some((x) => x.id === "user-drums" && x.notes.length === 1));
+  reload();
+  refreshAll();
 });
+/** Play one drum hit and record it into that piece's layer if recording. */
+async function drumHit(pitch, vel = 0.9) {
+  await audio.init();
+  audio.playNote(pitch, "drums");
+  if (recording && playing) {
+    drumLayer(pitch).notes.push({ pitch, start: snapBeat(audio.getBeat()) % loopBeats(), dur: 0.25, vel });
+    reload();
+    refreshAll(false);
+  }
+}
 function showTab(which) {
   $("tab-roll").setAttribute("aria-selected", String(which === "roll"));
   $("tab-rack").setAttribute("aria-selected", String(which === "rack"));
@@ -202,7 +336,7 @@ $("mixer").addEventListener("click", (e) => {
   const tracks = project.tracks.filter((t) => t.type === m.dataset.mute);
   const mute = !tracks.every((t) => t.muted);
   tracks.forEach((t) => (t.muted = mute));
-  audio.loadProject(project);
+  reload();
   refreshAll();
 });
 function bumpMeter(type, vel = 0.8) { levels[type] = Math.min(1, Math.max(levels[type] || 0, 0.55 + vel * 0.45)); }
@@ -217,7 +351,7 @@ function frame() {
     const inLoop = beat % loopBeats();
     roll.setPlayhead(inLoop);
     const head = $("plHead");
-    if (head) { head.hidden = false; const lanes = $("lanes"); const x0 = 160, w = lanes.clientWidth - x0; head.style.left = `${x0 + (inLoop / loopBeats()) * w}px`; }
+    if (head) { head.hidden = false; const lanes = $("lanes"); const x0 = 250, w = lanes.clientWidth - x0; head.style.left = `${x0 + (inLoop / loopBeats()) * w}px`; }
     const whole = Math.floor(beat);
     if (whole !== lastBeat) { lastBeat = whole; visuals.beat(whole % loopBeats()); window.api.remote?.beat(whole); highlightRackStep(inLoop); }
     const b = Math.floor(inLoop), bar = Math.floor(b / 4) + 1, bt = (b % 4) + 1, s16 = Math.floor((inLoop % 1) * 4) + 1;
@@ -274,8 +408,8 @@ requestAnimationFrame(frame);
 async function play() {
   await audio.init();
   Object.entries(vols).forEach(([t, db]) => audio.setVolume(t, db));
-  userTrack().notes = roll.getNotes();
-  audio.loadProject(project);
+  syncActive();
+  reload();
   audio.play();
   playing = true;
   $("play").classList.add("on");
@@ -290,7 +424,7 @@ $("bpm").onchange = () => { project.bpm = Math.min(200, Math.max(60, Number($("b
 const nudgeBpm = (d) => { $("bpm").value = Math.min(200, Math.max(60, project.bpm + d)); $("bpm").onchange(); };
 $("bpmDown").onclick = () => nudgeBpm(-1);
 $("bpmUp").onclick = () => nudgeBpm(1);
-$("clear").onclick = () => { roll.clear(); const d = project.tracks.find((t) => t.id === "user-drums"); if (d) d.notes = []; audio.loadProject(project); refreshAll(); status("Cleared what you played. The producer's parts are still there."); };
+$("clear").onclick = () => { const a = armed(); if (a.type === "drums") a.notes = []; else roll.clear(); reload(); refreshAll(); status(`Cleared ${a.name}. Other layers are untouched (use the ✕ buttons in the playlist to delete specific parts).`); };
 window.addEventListener("keydown", (e) => {
   if (e.target?.closest?.("input, textarea")) return;
   if (e.code === "Space") { e.preventDefault(); playing ? stop() : play(); }
@@ -300,7 +434,7 @@ window.addEventListener("keydown", (e) => {
 function setLoop(bars) {
   project.bars = bars;
   roll.setBars(bars);
-  audio.loadProject(project);
+  reload();
   refreshAll();
   syncPhones();
   status(`Loop is ${bars} bar${bars > 1 ? "s" : ""}. Press Rec and play over it: every pass adds to the loop.`);
@@ -309,15 +443,15 @@ document.querySelectorAll(".loop-picker [data-bars]").forEach((b) => b.addEventL
 $("doubleLoop").onclick = () => {
   if (project.bars >= 8) { status("The loop is already 8 bars, the longest it goes."); return; }
   const len = loopBeats();
-  userTrack().notes = roll.getNotes();
+  syncActive();
   for (const t of project.tracks) {
     const inside = t.notes.filter((n) => n.start < len);
     t.notes = [...inside, ...inside.map((n) => ({ ...n, start: n.start + len }))];
   }
   project.bars *= 2;
   roll.setBars(project.bars);
-  roll.setTracks(project.tracks, userTrack().notes);
-  audio.loadProject(project);
+  { const a = armed(); roll.setTracks(project.tracks, a.type !== "drums" ? a.notes : undefined); }
+  reload();
   refreshAll();
   status(`Doubled: your ${project.bars / 2}-bar loop now plays twice in a ${project.bars}-bar loop. Change the second half to make it move.`);
   explain("STUDIO", `Loop doubled to ${project.bars} bars`, "Copied every track. Record over the second half to make it evolve.", 3500);
@@ -339,7 +473,7 @@ $("notes").addEventListener("click", (e) => {
     const did = applyTip(project, tip);
     tip.done = did ? "Applied: " + did : "Couldn't apply that one (the track isn't there).";
     if (did) { explain("AI PRODUCER", "Producer note applied", did + " The AI suggested it; one tap edited the actual notes."); remember(`The user APPLIED the producer note "${tip.tip}" (${tip.action}).`); }
-    audio.loadProject(project);
+    reload();
     refreshAll();
     renderNotes();
     status(did || "Nothing to change for that note.");
@@ -353,8 +487,9 @@ $("notes").addEventListener("click", (e) => {
 });
 
 async function produce(instruction = "") {
-  const userNotes = roll.getNotes();
-  const drums = project.tracks.find((t) => t.id === "user-drums")?.notes || [];
+  syncActive();
+  const userNotes = project.tracks.filter((t) => t.source === "user" && t.type !== "drums").flatMap((t) => t.notes);
+  const drums = project.tracks.filter((t) => t.source === "user" && t.type === "drums").flatMap((t) => t.notes);
   if (!userNotes.length && !drums.length) { status("Play something first: press Rec, then tap your phone pads or keys A–L."); return; }
   if (busy) return;
   busy = true;
@@ -403,12 +538,12 @@ document.querySelectorAll(".move").forEach((b) => b.addEventListener("click", ()
 $("askBtn").onclick = () => { const v = $("instruction").value.trim(); if (v) { produce(v); $("instruction").value = ""; } };
 $("instruction").addEventListener("keydown", (e) => { if (e.key === "Enter") $("askBtn").click(); });
 $("arrange").onclick = () => {
-  userTrack().notes = roll.getNotes();
+  syncActive();
   const did = arrange(project);
   if (!did) { status("Already 8 bars. Use the loop buttons to change the length."); return; }
   roll.setBars(project.bars);
-  roll.setTracks(project.tracks, userTrack().notes);
-  audio.loadProject(project);
+  { const a = armed(); roll.setTracks(project.tracks, a.type !== "drums" ? a.notes : undefined); }
+  reload();
   refreshAll();
   syncPhones();
   status(did);
@@ -426,7 +561,7 @@ window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("perf")
 // ---------- Phone pads (Wi-Fi or USB) ----------
 function syncPhones() {
   const m = MOODS[mood];
-  window.api.remote?.setState({ title: songTitle, mood, moodLabel: m.label, key: m.key, root: m.root, scale: m.scale, bpm: project.bpm, playing, recording });
+  window.api.remote?.setState({ title: songTitle, mood, moodLabel: m.label, key: m.key, root: m.root, scale: m.scale, bpm: project.bpm, playing, recording, bars: project.bars });
 }
 const held = new Map(); // pitch -> { note, t }
 window.api.remote?.onMessage(async (msg) => {
@@ -434,12 +569,7 @@ window.api.remote?.onMessage(async (msg) => {
     await audio.init();
     if (msg.kind === "drums") {
       if (!msg.on) return;
-      audio.playNote(msg.pitch, "drums");
-      if (recording && playing) {
-        userDrums().notes.push({ pitch: msg.pitch, start: (Math.round(audio.getBeat() * 4) / 4) % loopBeats(), dur: 0.25, vel: msg.vel ?? 0.9 });
-        audio.loadProject(project);
-        refreshAll(!mixerChannels().some((c) => c.type === "drums"));
-      }
+      drumHit(msg.pitch, msg.vel ?? 0.9);
     } else if (msg.on) {
       held.set(msg.pitch, { note: roll.hit(msg.pitch), t: performance.now() });
     } else {
@@ -451,6 +581,8 @@ window.api.remote?.onMessage(async (msg) => {
     if (msg.action === "play") play();
     else if (msg.action === "stop") stop();
     else if (msg.action === "rec") toggleRec();
+    else if (msg.action === "loop" && [1, 2, 4, 8].includes(msg.bars)) setLoop(msg.bars);
+    else if (msg.action === "double") $("doubleLoop").click();
   }
 });
 window.api.remote?.onClients((n) => {
@@ -575,3 +707,32 @@ window.api.memory?.onStored((r) => {
 });
 refreshMemory();
 setInterval(refreshMemory, 30000);
+
+// ---------- Quantise ----------
+roll.setQuantize(quant());
+$("quantize").addEventListener("change", () => { roll.setQuantize(quant()); status(quant() ? `Recording now snaps to ${$("quantize").selectedOptions[0].text} notes.` : "Quantise off: notes land exactly where you play them."); });
+$("quantizeNow").onclick = () => {
+  const g = quant() || 0.25;
+  syncActive();
+  const a = armed();
+  a.notes = a.notes.map((n) => ({ ...n, start: (Math.round(n.start / g) * g) % loopBeats(), dur: a.type === "drums" ? n.dur : Math.max(g, Math.round(n.dur / g) * g) }));
+  if (a.type !== "drums") roll.setActive(a.id, TRACK_COLORS[a.type], a.notes, project.tracks);
+  reload(); refreshAll();
+  status(`Quantised ${a.name} to ${$("quantize").selectedOptions[0].text === "Off" ? "1/16" : $("quantize").selectedOptions[0].text}.`);
+  explain("STUDIO", `Quantised ${a.name}`, "Every note snapped onto the beat grid, so it sounds tight even if the timing was loose.", 3500);
+};
+
+// ---------- Before / After ----------
+function setAB(mode) {
+  abMode = mode;
+  $("abBefore").setAttribute("aria-pressed", String(mode === "before"));
+  $("abAfter").setAttribute("aria-pressed", String(mode === "after"));
+  reload();
+  roll.setTracks(mode === "before" ? project.tracks.filter((t) => t.source === "user") : project.tracks);
+  visuals.setTracks(mode === "before" ? project.tracks.filter((t) => t.source === "user") : project.tracks, project.bars);
+  if (!playing) play();
+  explain("AI PRODUCER", mode === "before" ? "Before: just what you played" : "After: the full production",
+    mode === "before" ? "This is your original beat on its own." : "Your beat stays at the centre; the producer built drums, bass and synths around it.", 3500);
+}
+$("abBefore").onclick = () => setAB("before");
+$("abAfter").onclick = () => setAB("after");

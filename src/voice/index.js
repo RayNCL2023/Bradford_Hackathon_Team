@@ -144,11 +144,12 @@ async function makeClip(idea, card) {
 }
 
 function renderControls(idea, clip, card) {
-  const state = { pitch: 0, tone: "clean", addedId: "" };
+  const state = { pitch: 0, speed: 1, tone: "clean", addedId: "" };
   const box = card.querySelector(".clip-actions");
   box.outerHTML = `
     <div class="fx">
       <label class="fx-row"><span>Pitch</span><input type="range" min="-12" max="12" step="1" value="0" data-fx="pitch"><output>0</output></label>
+      <label class="fx-row"><span>Speed</span><input type="range" min="0.5" max="2" step="0.05" value="1" data-fx="speed"><output>1×</output></label>
       <div class="tones" role="group" aria-label="Tone">${Object.entries(options.tones).map(([k, t]) =>
         `<button class="tone" data-tone="${k}" aria-pressed="${k === "clean"}">${esc(t.label)}</button>`).join("")}</div>
     </div>
@@ -158,7 +159,7 @@ function renderControls(idea, clip, card) {
       ${clip.note ? `<span class="status">${esc(clip.note)}</span>` : ""}
     </div>`;
 
-  const opts = () => ({ pitch: state.pitch, tone: state.tone });
+  const opts = () => ({ pitch: state.pitch, speed: state.speed, tone: state.tone });
   const changed = () => {
     if (state.addedId) options.onUpdateClip(state.addedId, opts());
     options.onPreview(clip.url, opts());
@@ -166,6 +167,9 @@ function renderControls(idea, clip, card) {
   const slider = card.querySelector('[data-fx="pitch"]');
   slider.oninput = () => { state.pitch = Number(slider.value); slider.nextElementSibling.textContent = (state.pitch > 0 ? "+" : "") + state.pitch; };
   slider.onchange = changed;
+  const sp = card.querySelector('[data-fx="speed"]');
+  sp.oninput = () => { state.speed = Number(sp.value); sp.nextElementSibling.textContent = state.speed.toFixed(2).replace(/0$/, "") + "×"; };
+  sp.onchange = changed;
   card.querySelectorAll(".fx .tone").forEach((b) => b.onclick = () => {
     state.tone = b.dataset.tone;
     card.querySelectorAll(".fx .tone").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));

@@ -64,11 +64,11 @@ kbd { font: 600 11px var(--body); background: var(--bg); border: 1px solid var(-
 
 /* Playlist */
 .playlist { border-bottom: 1px solid var(--line); }
-.pl-head { display: grid; grid-template-columns: 160px minmax(0, 1fr); height: 24px; align-items: center; background: var(--panel); border-bottom: 1px solid var(--line); }
+.pl-head { display: grid; grid-template-columns: 250px minmax(0, 1fr); height: 24px; align-items: center; background: var(--panel); border-bottom: 1px solid var(--line); }
 .pl-head .cap { padding-left: 10px; }
 .pl-ruler { display: grid; font: 500 10px var(--mono); color: var(--dim); }
 .lanes { max-height: 210px; overflow-y: auto; }
-.lane { display: grid; grid-template-columns: 160px minmax(0, 1fr); height: 34px; border-bottom: 1px solid #1C1D23; }
+.lane { display: grid; grid-template-columns: 250px minmax(0, 1fr); height: 34px; border-bottom: 1px solid #1C1D23; }
 .lane-name { display: flex; align-items: center; gap: 8px; padding: 0 8px; background: #18191F; border: 0; border-right: 1px solid var(--line); min-width: 0; text-align: left; color: var(--text); }
 .lane-name b { font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lane-name small { font: 500 9px var(--mono); color: var(--dim); }
@@ -158,7 +158,7 @@ kbd { font: 600 11px var(--body); background: var(--bg); border: 1px solid var(-
 .vocals .btn.accent { background: var(--lilac); border-color: var(--lilac); color: var(--bg); }
 .vocals .tag { font: 600 10px var(--mono); color: var(--lilac); margin-left: auto; white-space: nowrap; }
 .fx { display: grid; gap: 6px; }
-.fx-row { display: grid; grid-template-columns: 36px 1fr 24px; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.fx-row { display: grid; grid-template-columns: 40px 1fr 34px; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 .fx-row input { accent-color: var(--lilac); }
 .fx-row output { text-align: right; color: var(--text); font: 500 11px var(--mono); }
 .tones { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -245,3 +245,26 @@ img.pix { width: 18px; height: 18px; image-rendering: pixelated; display: block;
 .bpm-btns img.pix { width: 12px; height: 12px; }
 .loop-picker > img.pix { margin-right: 2px; opacity: .8; }
 .lane-name img.pix { width: 16px; height: 16px; }
+
+/* Layers: lane buttons, armed lane, sub-lanes, clip delete, add layer */
+.lane-name { display: flex; align-items: center; gap: 4px; padding: 0 4px 0 8px; }
+.ln-title { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; height: 100%; border: 0; background: transparent; color: var(--text); text-align: left; padding: 0; }
+.lane-btns { display: flex; gap: 2px; flex: none; }
+.lb { width: 18px; height: 18px; padding: 0; border-radius: 4px; border: 1px solid #2E3039; background: transparent; color: var(--dim); font: 700 9px var(--mono); line-height: 1; }
+.lb.on-m { background: var(--red); color: #fff; border-color: var(--red); }
+.lb.on-s { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+.lb.on-a { background: var(--red); color: #fff; border-color: var(--red); }
+.lane.armed .lane-name { box-shadow: inset 3px 0 0 var(--red); }
+.lane.sub .lane-name { padding-left: 22px; background: #15161B; }
+.lane.sub .ln-title b { font-weight: 500; color: var(--muted); }
+.clip-x { position: absolute; right: 2px; top: 1px; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 3px; background: #11121699; color: #fff; font-size: 12px; line-height: 1; opacity: 0; }
+.clip-block:hover .clip-x, .clip-x:focus-visible { opacity: 1; }
+.add-row { height: 30px; }
+.add-layer { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--amber); font-weight: 600; }
+.add-layer select, .quant select, .rack-bars select { height: 24px; border-radius: 5px; border: 1px solid #2E3039; background: var(--panel-3); color: var(--text); font: inherit; font-size: 12px; }
+.lanes { max-height: 250px; overflow-y: scroll; }
+.roll-wrap { overflow-y: scroll; overflow-x: hidden; }
+.quant { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.ab { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px; align-items: center; font-size: 12px; color: var(--muted); }
+.ab button { height: 32px; border-radius: 8px; border: 1px solid #2E3039; background: var(--panel-2); font-weight: 700; }
+.ab button[aria-pressed="true"] { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }

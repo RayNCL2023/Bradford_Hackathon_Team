@@ -165,7 +165,9 @@ export function getSpectrum() {
 // ---------- Voice clips: pitch + tone ----------
 function buildChain(opts) {
   const Tone = T();
-  const nodes = [new Tone.PitchShift({ pitch: Number(opts.pitch) || 0, windowSize: 0.08 })];
+  // Speed changes playback rate; the pitch shifter cancels the pitch change so only the timing moves.
+  const speedFix = opts.speed && opts.speed !== 1 ? -12 * Math.log2(opts.speed) : 0;
+  const nodes = [new Tone.PitchShift({ pitch: (Number(opts.pitch) || 0) + speedFix, windowSize: 0.08 })];
   switch (opts.tone) {
     case "stadium": nodes.push(new Tone.Reverb({ decay: 6, wet: 0.55 })); break;
     case "echo":    nodes.push(new Tone.FeedbackDelay({ delayTime: "8n", feedback: 0.45, wet: 0.45 })); break;
@@ -200,7 +202,7 @@ export async function addClip(url, startBeat, opts = {}) {
   if (!started || !url) return "";
   const id = Math.random().toString(36).slice(2);
   const player = await loadPlayer(url);
-  if (opts.sourceBpm) player.playbackRate = T().Transport.bpm.value / opts.sourceBpm;
+  player.playbackRate = (opts.sourceBpm ? T().Transport.bpm.value / opts.sourceBpm : 1) * (Number(opts.speed) || 1);
   if (opts.loopBars) player.loop = true;
   const chain = buildChain(opts);
   player.connect(chain[0]);
@@ -215,6 +217,7 @@ export function updateClip(id, opts) {
   const c = clips.get(id);
   if (!c) return;
   c.opts = { ...c.opts, ...opts };
+  c.player.playbackRate = (c.opts.sourceBpm ? T().Transport.bpm.value / c.opts.sourceBpm : 1) * (Number(c.opts.speed) || 1);
   c.player.disconnect();
   c.chain.forEach((n) => n.dispose());
   c.chain = buildChain(c.opts);
@@ -229,6 +232,7 @@ export async function previewClip(url, opts = {}) {
   const player = await loadPlayer(url);
   const chain = buildChain(opts);
   player.connect(chain[0]);
+  player.playbackRate = Number(opts.speed) || 1;
   player.start();
   preview = { player, chain };
 }
