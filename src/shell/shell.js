@@ -65,6 +65,7 @@ voice.mountPanel($("panel"), {
     return id;
   },
   onUpdateClip: (id, opts) => audio.updateClip(id, opts),
+  currentBar: () => (playing ? Math.floor((audio.getBeat() % loopBeats()) / 4) + 1 : 1),
 });
 audio.onNote((n) => { visuals.noteOn(n); bumpMeter(n.type, n.vel); });
 visuals.setSpectrumSource(() => audio.getSpectrum());

@@ -85,6 +85,7 @@ if (process.env.SMOKE) {
 
 ipcMain.handle("ai:produce", (_e, req) => ai.produce(req));
 ipcMain.handle("voice:clips", (_e, ideas) => voice.makeVocalClips(ideas, app.getPath("userData")));
+ipcMain.handle("voice:adlib", (_e, req) => voice.makeAdlib(req, app.getPath("userData")));
 
 app.whenReady().then(() => {
   createWindow();

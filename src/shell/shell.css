@@ -185,3 +185,11 @@ kbd { font: 600 11px var(--body); background: var(--bg); border: 1px solid var(-
 .pd-count { margin: 0; font-size: 12.5px; color: var(--muted); }
 
 @media (max-width: 1180px) { .app { grid-template-columns: 200px minmax(0, 1fr) 270px; } .bottom { grid-template-columns: minmax(0, 1fr) 220px; } }
+
+/* Your ad-lib card */
+.vocals .adlib { border: 1px solid #3a2f52; }
+.adlib-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vocals .rec-adlib { background: #2A1820; border-color: #5A2230; color: var(--red); touch-action: none; }
+.vocals .rec-adlib[aria-pressed="true"] { background: var(--red); color: #fff; border-color: var(--red); }
+.adlib-text { height: 32px; border-radius: 6px; border: 1px solid #2E3039; background: var(--bg); color: var(--text); padding: 0 8px; font: inherit; font-size: 12px; user-select: text; min-width: 0; }
+.vocals .adlib .tone { text-transform: capitalize; }

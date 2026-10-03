@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("api", {
   produce: (req) => ipcRenderer.invoke("ai:produce", req),
   // VocalIdea[] -> VocalClip[]
   makeVocalClips: (ideas) => ipcRenderer.invoke("voice:clips", ideas),
+  // { text?, audio?: Uint8Array, mime?, style, seconds? } -> VocalClip (your own ad-lib, re-voiced to fit)
+  makeAdlib: (req) => ipcRenderer.invoke("voice:adlib", req),
   // Phone pads (src/remote): connection info, incoming notes, and studio state sent back to phones.
   remote: {
     info: () => ipcRenderer.invoke("remote:info"),

@@ -156,4 +156,54 @@ async function makeVocalClips(ideas, saveDir) {
 /** What has been spent this session, for showing in the UI. */
 function usage() { return { chars: spent.chars, maxChars: maxChars(), sfx: spent.sfx, maxSfx: maxSfx(), mock: mock() }; }
 
-module.exports = { makeVocalClips, soundEffect, pickVoice, performance, usage };
+// ---------- Your own ad-libs ----------
+// A recording is re-voiced with ElevenLabs speech-to-speech (keeps your timing and delivery, swaps the voice);
+// a typed line is spoken in the chosen style. Capped: 5 s per recording, ELEVENLABS_MAX_STS conversions per session.
+const maxSts = () => Number(process.env.ELEVENLABS_MAX_STS ?? 3);
+spent.sts = 0;
+
+async function speechToSpeech(voiceId, audio, mime) {
+  const form = new FormData();
+  form.append("audio", new Blob([audio], { type: mime || "audio/webm" }), "adlib.webm");
+  form.append("model_id", "eleven_multilingual_sts_v2");
+  form.append("remove_background_noise", "true");
+  const res = await fetch(`${API}/speech-to-speech/${voiceId}?output_format=mp3_44100_128`, { method: "POST", headers: { "xi-api-key": key() }, body: form });
+  if (!res.ok) throw new Error(await errorText(res));
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
+ * @param {{ text?:string, audio?:Uint8Array, mime?:string, style:string, seconds?:number }} req
+ * @param {string} saveDir
+ * @returns {Promise<import("../shared/contracts.js").VocalClip>}
+ */
+async function makeAdlib(req, saveDir) {
+  const style = String(req.style || "hype shout").slice(0, 60);
+  const lyric = String(req.text || "").trim().slice(0, 80) || "Your ad-lib";
+  const id = `adlib-${Date.now()}`;
+  const base = { id, ideaId: id, lyric, reason: `Your ad-lib, voiced as ${style}` };
+  if (mock()) return { ...base, url: toUrl(beepWav(), "audio/wav"), note: "Test beep (ELEVENLABS_MOCK=1, no credit used)" };
+  if (!key()) return { ...base, url: "", error: "Add ELEVENLABS_API_KEY to .env to make audio" };
+
+  if (!req.audio) {
+    // Typed line: same path as the AI's ideas (cached by lyric + style, character cap applies).
+    const [clip] = await makeVocalClips([{ id, lyric, style, bar: 1, reason: base.reason }], saveDir);
+    return { ...clip, id, ideaId: id, reason: base.reason };
+  }
+  if ((req.seconds || 0) > 5.5) return { ...base, url: "", error: "Keep recordings under 5 seconds." };
+  if (spent.sts >= maxSts()) return { ...base, url: "", error: `Recording limit reached (${maxSts()} this session). Raise ELEVENLABS_MAX_STS to allow more.` };
+  try {
+    const voices = await listVoices();
+    const buf = await speechToSpeech(pickVoice(voices, style, 0).voice_id, Buffer.from(req.audio), req.mime);
+    spent.sts++;
+    const dir = path.join(saveDir, "vocals");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${id}.mp3`);
+    fs.writeFileSync(file, buf);
+    return { ...base, lyric: req.text?.trim() || "Your recording", url: toUrl(buf), file, note: `Re-voiced by ElevenLabs (${spent.sts}/${maxSts()} recordings this session)` };
+  } catch (e) {
+    return { ...base, url: "", error: e.message };
+  }
+}
+
+module.exports = { makeVocalClips, makeAdlib, soundEffect, pickVoice, performance, usage };
