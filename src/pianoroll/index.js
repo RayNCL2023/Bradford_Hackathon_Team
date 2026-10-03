@@ -3,7 +3,7 @@
 // Starter version: canvas grid, click to add/remove notes, computer keys play/record notes locked to a scale.
 import { TRACK_COLORS, BEATS_PER_BAR, MOODS } from "../shared/contracts.js";
 
-const LOW = 36, HIGH = 84;           // C2..C6
+const LOW = 33, HIGH = 84;           // A1..C6 (drums sit just above the bottom edge)
 const ROW_H = 12, STEP_W = 22;       // one 16th note = STEP_W px
 // Scale lock: every key plays a note from the mood's scale, so nothing sounds wrong.
 const ROW_LOW = "asdfghjkl";          // middle row walks up the scale
@@ -41,6 +41,8 @@ export function mount(el, options) {
   window.addEventListener("keydown", onKey);
   window.addEventListener("keyup", (e) => held.delete(e.key.toLowerCase()));
   draw();
+  // Open scrolled to the bottom so drums and bass are in view.
+  requestAnimationFrame(() => { el.closest(".roll-wrap")?.scrollTo(0, 1e6); });
 }
 
 function resize() {
@@ -104,7 +106,8 @@ function draw() {
     }
     ctx.globalAlpha = 1;
   };
-  for (const t of aiTracks) if (t.type !== "drums" && !t.muted) drawNotes(t.notes, TRACK_COLORS[t.type], 0.45);
+  // Other tracks behind the user's notes. Drums sit at their own pitches (kick 36 ... crash 49) at the bottom.
+  for (const t of aiTracks) if (!t.muted) drawNotes(t.notes, TRACK_COLORS[t.type], t.source === "user" ? 0.95 : 0.45);
   drawNotes(userNotes, TRACK_COLORS.keys, 1);
   if (playhead >= 0) { ctx.fillStyle = "#fff"; ctx.fillRect(xOf(playhead), 0, 2, h); }
 }
@@ -114,7 +117,7 @@ export function getNotes() { return userNotes.map((n) => ({ ...n })); }
 
 /** Show AI (or other) tracks behind the user's notes. Pass {userNotes} to replace the user's notes too. */
 export function setTracks(tracks, replaceUserNotes) {
-  aiTracks = tracks.filter((t) => t.source !== "user");
+  aiTracks = tracks.filter((t) => t.id !== "user"); // everything except the notes this roll edits itself
   if (replaceUserNotes) userNotes = replaceUserNotes.map((n) => ({ ...n }));
   draw();
 }

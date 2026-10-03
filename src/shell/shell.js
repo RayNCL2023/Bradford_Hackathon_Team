@@ -172,6 +172,7 @@ window.api.remote?.onMessage(async (msg) => {
       if (recording && playing) {
         userDrums().notes.push({ pitch: msg.pitch, start: (Math.round(audio.getBeat() * 4) / 4) % (project.bars * 4), dur: 0.25, vel: msg.vel ?? 0.9 });
         audio.loadProject(project);
+        roll.setTracks(project.tracks);
         refreshVisuals();
       }
     } else if (msg.on) {

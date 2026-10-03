@@ -35,7 +35,10 @@ function makeInstruments() {
     bass: new Tone.PolySynth(Tone.MonoSynth, { oscillator: { type: "square" }, filter: { Q: 2, type: "lowpass" }, filterEnvelope: { attack: 0.01, decay: 0.2, baseFrequency: 120, octaves: 2.5 }, volume: -8 }).toDestination(),
     kick: new Tone.MembraneSynth({ pitchDecay: 0.03, octaves: 6, volume: -2 }).toDestination(),
     snare: new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.18, sustain: 0 }, volume: -10 }).toDestination(),
-    hat: new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.05, release: 0.01 }, harmonicity: 5.1, resonance: 4000, volume: -26 }).toDestination(),
+    hat: new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.04, sustain: 0 }, volume: -14 }).connect(new Tone.Filter({ type: "highpass", frequency: 7000 }).toDestination()),
+    openHat: new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.3, sustain: 0 }, volume: -16 }).connect(new Tone.Filter({ type: "highpass", frequency: 6000 }).toDestination()),
+    clap: new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.002, decay: 0.12, sustain: 0 }, volume: -6 }).connect(new Tone.Filter({ type: "bandpass", frequency: 1500, Q: 1.2 }).toDestination()),
+    crash: new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.002, decay: 1.4, sustain: 0 }, volume: -16 }).connect(new Tone.Filter({ type: "highpass", frequency: 4000 }).toDestination()),
   };
 }
 
@@ -63,7 +66,10 @@ function trigger(type, pitch, dur, time, vel) {
   try {
     if (type === "drums") {
       if (pitch === DRUM_PITCH.kick) inst.kick.triggerAttackRelease("C1", "8n", safeTime("kick", time), vel);
-      else if (pitch === DRUM_PITCH.snare || pitch === DRUM_PITCH.clap) inst.snare.triggerAttackRelease("16n", safeTime("snare", time), vel);
+      else if (pitch === DRUM_PITCH.snare) inst.snare.triggerAttackRelease("16n", safeTime("snare", time), vel);
+      else if (pitch === DRUM_PITCH.clap) inst.clap.triggerAttackRelease("16n", safeTime("clap", time), vel);
+      else if (pitch === DRUM_PITCH.openHat) inst.openHat.triggerAttackRelease("8n", safeTime("openHat", time), vel);
+      else if (pitch === DRUM_PITCH.crash) inst.crash.triggerAttackRelease("2n", safeTime("crash", time), vel);
       else inst.hat.triggerAttackRelease("32n", safeTime("hat", time), vel);
     } else {
       (inst[type] || inst.keys).triggerAttackRelease(T().Frequency(pitch, "midi").toFrequency(), dur, time, vel);
