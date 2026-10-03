@@ -210,3 +210,25 @@ kbd { font: 600 11px var(--body); background: var(--bg); border: 1px solid var(-
 .samples li .mini { height: 24px; padding: 0 7px; border-radius: 5px; border: 1px solid #2E3039; background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
 .samples li .mini.on { background: var(--amber); color: var(--bg); border-color: var(--amber); }
 .samples .s-empty { font-size: 12px; color: var(--muted); background: var(--panel-2); border-radius: 8px; padding: 10px; }
+
+/* Explain callouts (for judges) */
+.callouts { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 30; display: grid; gap: 8px; width: min(560px, calc(100% - 32px)); pointer-events: none; }
+.callout { background: #0B0C0Fee; border: 1px solid var(--line); border-left: 4px solid var(--c, var(--amber)); border-radius: 12px; padding: 12px 16px; display: grid; gap: 4px; box-shadow: 0 12px 40px #000a; animation: callIn .25s ease-out; }
+.callout.out { animation: callOut .3s ease-in forwards; }
+.callout .ctag { font: 700 10px var(--mono); letter-spacing: .14em; color: var(--c, var(--amber)); }
+.callout b { font: 800 17px var(--display); line-height: 1.2; }
+.callout span { color: #c9c8c4; font-size: 13.5px; line-height: 1.45; }
+@keyframes callIn { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes callOut { to { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .callout, .callout.out { animation: none; } }
+#explainBtn[aria-pressed="true"] { border-color: #4a3a12; color: var(--amber); }
+.perf .callouts { top: 24px; }
+
+/* Producer memory */
+.mem-cap { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.mem-state { font: 600 9px var(--mono); letter-spacing: .08em; padding: 2px 6px; border-radius: 99px; background: var(--panel-3); color: var(--muted); text-transform: none; }
+.mem-state.on { background: #16241D; color: var(--green); }
+.memory { display: grid; gap: 6px; }
+.mem-fact { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; display: grid; gap: 2px; }
+.mem-fact small { font: 600 9px var(--mono); letter-spacing: .1em; color: var(--green); }
+.mem-fact.core small { color: var(--amber); }

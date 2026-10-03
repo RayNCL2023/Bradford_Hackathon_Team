@@ -98,6 +98,8 @@ function wireAdlib() {
     $("adlibGo").disabled = false;
     if (!clip?.url) { $("adlibStatus").textContent = clip?.error || "Couldn't make that one."; return; }
     $("adlibStatus").textContent = "";
+    window.dispatchEvent(new CustomEvent("explain", { detail: { tag: "ELEVENLABS", title: recorded ? "Your voice, re-voiced to fit" : "Your line, voiced to fit",
+      text: recorded ? `ElevenLabs speech-to-speech kept your timing and delivery and swapped in a ${style} voice.` : `ElevenLabs spoke your words as a ${style}.` } }));
     recorded = null; $("adlibTimer").textContent = ""; $("adlibText").value = "";
     const card = document.createElement("div");
     card.className = "clip";
@@ -136,6 +138,8 @@ async function makeClip(idea, card) {
     box.querySelector('[data-act="retry"]').onclick = () => makeClip(idea, card);
     return;
   }
+  window.dispatchEvent(new CustomEvent("explain", { detail: { tag: "ELEVENLABS", title: `Vocal made: “${idea.lyric}”`,
+    text: `Gemma suggested the line; ElevenLabs picked a matching voice for “${idea.style}” and performed it.` } }));
   renderControls(idea, clip, card);
 }
 
