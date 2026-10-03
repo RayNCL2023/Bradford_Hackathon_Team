@@ -284,3 +284,10 @@ img.pix { width: 18px; height: 18px; image-rendering: pixelated; display: block;
 .chan .mute { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .chan .mute img.pix { width: 14px; height: 14px; }
 .chan img.vol { width: 14px; height: 14px; }
+
+/* Samples list: long names shrink (…) instead of pushing the Add button off the panel */
+.samples { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.samples > *, .samples details, .samples ul, .samples li { min-width: 0; max-width: 100%; }
+.samples .s-search { width: 100%; box-sizing: border-box; }
+.samples li .mini { flex: none; }
+.browser section { min-width: 0; }
