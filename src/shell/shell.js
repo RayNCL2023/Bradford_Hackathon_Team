@@ -28,25 +28,40 @@ $("moods").addEventListener("click", (e) => {
   project.bpm = MOODS[mood].bpm;
   $("bpm").value = project.bpm;
   audio.setBpm(project.bpm);
+  refreshVisuals();
   status(`${MOODS[mood].label} mood: ${project.bpm} BPM. Every key now plays notes that fit.`);
 });
 
 // ---- Modules ----
 roll.mount($("roll"), {
   bars: project.bars,
-  onNoteOn: async (pitch) => { await audio.init(); audio.playNote(pitch); visuals.pulse(0.25); },
+  onNoteOn: async (pitch) => { await audio.init(); audio.playNote(pitch); },
   isRecording: () => recording && playing,
   getBeat: () => audio.getBeat(),
-  onChange: () => { userTrack().notes = roll.getNotes(); audio.loadProject(project); },
+  onChange: () => { userTrack().notes = roll.getNotes(); audio.loadProject(project); refreshVisuals?.(); },
 });
 visuals.mount($("stage"));
 voice.mountPanel($("panel"), {
-  onAddClip: ({ url, name, bar }) => {
-    project.clips.push({ id: crypto.randomUUID(), name, url, startBeat: (bar - 1) * 4 });
-    audio.addClip(url, (bar - 1) * 4);
-    status(`Added "${name}" at bar ${bar}.`);
+  tones: audio.TONES,
+  onPreview: async (url, opts) => { await audio.init(); audio.previewClip(url, opts); },
+  onAddClip: async ({ url, name, bar, opts }) => {
+    await audio.init();
+    const id = await audio.addClip(url, (bar - 1) * 4, opts);
+    project.clips.push({ id, name, url, startBeat: (bar - 1) * 4 });
+    status(`Added "${name}" at bar ${bar}. Change its pitch or tone any time.`);
+    return id;
   },
+  onUpdateClip: (id, opts) => audio.updateClip(id, opts),
 });
+// Every note heard drives the visuals; the live spectrum feeds the ring.
+audio.onNote((n) => visuals.noteOn(n));
+visuals.setSpectrumSource(() => audio.getSpectrum());
+visuals.setClock(() => audio.getBeat());
+const refreshVisuals = () => {
+  visuals.setTracks(project.tracks, project.bars);
+  visuals.setMeta({ mood: MOODS[mood].label, bpm: project.bpm, key: MOODS[mood].key });
+};
+refreshVisuals();
 
 function renderTracks() {
   $("trackList").innerHTML = project.tracks.map((t) => `
@@ -62,6 +77,7 @@ $("trackList").addEventListener("click", (e) => {
   renderTracks();
   roll.setTracks(project.tracks);
   audio.loadProject(project);
+  refreshVisuals();
 });
 renderTracks();
 
@@ -80,7 +96,7 @@ $("rec").onclick = () => { recording = !recording; $("rec").setAttribute("aria-p
 $("bpm").onchange = () => { project.bpm = Math.min(200, Math.max(60, Number($("bpm").value) || 124)); audio.setBpm(project.bpm); };
 $("clear").onclick = () => roll.clear();
 window.addEventListener("keydown", (e) => {
-  if (e.target.closest("input, textarea")) return;
+  if (e.target?.closest?.("input, textarea")) return;
   if (e.code === "Space") { e.preventDefault(); playing ? stop() : play(); }
 });
 
@@ -92,7 +108,7 @@ let lastBeat = -1;
   const beat = audio.getBeat();
   roll.setPlayhead(beat % (project.bars * 4));
   const whole = Math.floor(beat);
-  if (whole !== lastBeat) { lastBeat = whole; visuals.pulse(whole % 4 === 0 ? 1 : 0.5); }
+  if (whole !== lastBeat) { lastBeat = whole; visuals.beat(whole % (project.bars * 4)); }
 })();
 
 // ---- The magic button ----
@@ -105,8 +121,8 @@ $("produce").onclick = async () => {
   const cook = setInterval(() => {
     const secs = Math.round((Date.now() - t0) / 1000);
     status(`${lines[Math.min(lines.length - 1, Math.floor(secs / 3))]}… ${secs}s`, true);
-    visuals.pulse(0.3);
   }, 500);
+  visuals.setCooking(true);
   status("Listening to your beat…", true);
   try {
     /** @type {import("../shared/contracts.js").AiResult} */
@@ -116,6 +132,7 @@ $("produce").onclick = async () => {
     roll.setTracks(project.tracks);
     visuals.setPalette(result.palette);
     visuals.setTitle(result.title);
+    refreshVisuals();
     await play();
     const by = { ollama: "local Gemma", gemini: "Gemma (Gemini API)", mock: "the demo track" }[result.source] || result.source;
     status(`"${result.title}" is ready, made by ${by}.${result.note ? " " + result.note : ""}`);
@@ -124,6 +141,7 @@ $("produce").onclick = async () => {
     status("Something went wrong: " + err.message);
   } finally {
     clearInterval(cook);
+    visuals.setCooking(false);
     $("produce").disabled = false;
   }
 };

@@ -61,3 +61,11 @@ kbd { font: 600 11px var(--body); background: var(--bg); border: 1px solid var(-
 .tag { font-size: 11px; color: var(--cyan); background: #00e5ff18; border-radius: 6px; padding: 1px 6px; margin-left: auto; white-space: nowrap; }
 .tips { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .tips li { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: flex; gap: 8px; flex-direction: row-reverse; justify-content: flex-end; }
+
+.fx { display: grid; gap: 8px; }
+.fx-row { display: grid; grid-template-columns: 40px 1fr 28px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.fx-row input { accent-color: var(--accent); }
+.fx-row output { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.tones { display: flex; flex-wrap: wrap; gap: 4px; }
+.tone { font: 600 11px var(--body); padding: 4px 9px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); cursor: pointer; }
+.tone[aria-pressed="true"] { background: var(--cyan); color: #04131a; border-color: var(--cyan); }

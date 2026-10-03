@@ -105,8 +105,8 @@ export const BEATS_PER_BAR = 4;
 
 // Moods replace music jargon for beginners. Each sets a BPM and a scale so every key sounds good.
 export const MOODS = {
-  chill:  { label: "Chill",  bpm: 90,  root: 57, scale: [0, 3, 5, 7, 10] },     // A minor pentatonic
-  dance:  { label: "Dance",  bpm: 124, root: 57, scale: [0, 2, 3, 5, 7, 8, 10] }, // A natural minor
-  hype:   { label: "Hype",   bpm: 140, root: 52, scale: [0, 3, 5, 6, 7, 10] },   // E minor blues
-  dreamy: { label: "Dreamy", bpm: 100, root: 60, scale: [0, 2, 4, 7, 9] },       // C major pentatonic
+  chill:  { label: "Chill",  bpm: 90,  root: 57, scale: [0, 3, 5, 7, 10],       key: "A minor" },
+  dance:  { label: "Dance",  bpm: 124, root: 57, scale: [0, 2, 3, 5, 7, 8, 10], key: "A minor" },
+  hype:   { label: "Hype",   bpm: 140, root: 52, scale: [0, 3, 5, 6, 7, 10],    key: "E minor" },
+  dreamy: { label: "Dreamy", bpm: 100, root: 60, scale: [0, 2, 4, 7, 9],        key: "C major" },
 };

@@ -63,7 +63,7 @@ function onClick(e) {
 }
 
 function onKey(e) {
-  if (e.target.closest("input, textarea")) return;
+  if (e.target?.closest?.("input, textarea")) return;
   const k = e.key.toLowerCase();
   if (k === "z") { shift = Math.max(-24, shift - 12); return; }
   if (k === "x") { shift = Math.min(12, shift + 12); return; }
