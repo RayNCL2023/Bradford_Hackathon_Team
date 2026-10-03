@@ -9,7 +9,7 @@ $key = ((Get-Content (Join-Path $root ".env") | Where-Object { $_ -match '^GEMIN
 if (-not $key) { Write-Host "Put GEMINI_API_KEY in .env first."; exit 1 }
 $env:OPENAI_API_KEY = $key
 $env:OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-$env:NMAFC_LLM_PROVIDER_MODEL = "openai/gemma-4-26b-a4b-it"   # Gemma 4 does the memory extraction too (gemini-3.8-flash free tier is only 20/day)
+$env:NMAFC_LLM_PROVIDER_MODEL = "openai/gemini-flash-lite-latest"   # Gemini Flash-Lite does memory extraction (keeps Gemma free for the producer; 3.8-flash free tier is only 20/day)
 $env:NMAFC_EMBEDDING_PROVIDER_MODEL = "openai/gemini-embedding-001"
 $env:NMAFC_EMBEDDING_DIM = "3072"   # skips NMAFC's dimension probe, which breaks on Windows
 Set-Location $svc
