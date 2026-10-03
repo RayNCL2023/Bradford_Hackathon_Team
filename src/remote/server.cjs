@@ -51,7 +51,11 @@ function startRemote(hooks) {
 
   const wss = new WebSocketServer({ server, path: "/ws" });
   let lastState = null;
-  wss.on("connection", (sock) => {
+  wss.on("connection", (sock, req) => {
+    const who = `${req.socket.remoteAddress} ${String(req.headers["user-agent"] || "").slice(0, 60)}`;
+    if (process.env.REMOTE_LOG) console.log(`[remote] open: ${who}`);
+    sock.on("close", (code, reason) => { if (process.env.REMOTE_LOG) console.log(`[remote] close ${code} ${reason}: ${who}`); });
+    sock.on("error", (e) => console.log(`[remote] socket error: ${e.message}`));
     hooks.onClients(wss.clients.size);
     if (lastState) sock.send(JSON.stringify(lastState));
     sock.on("message", (data) => {
