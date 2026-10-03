@@ -13,6 +13,7 @@ let title = "", meta = "";
 let tracks = [], totalBeats = 16;
 let spectrum = () => null, clock = () => 0;
 let cooking = false;
+let compact = false; // small panel view: disc centred, one-line title
 let thump = 0, flash = 0, spin = 0, t = 0;
 let rings = [], sparks = [], flares = new Map();
 let grain = null;
@@ -44,6 +45,8 @@ export function setTracks(list, bars = 4) { tracks = list.filter((x) => !x.muted
 export function setSpectrumSource(fn) { spectrum = fn; }
 export function setClock(fn) { clock = fn; }
 export function setCooking(on) { cooking = on; }
+/** Small panel view (true) or full poster layout (false, used by Performance mode). */
+export function setCompact(on) { compact = !!on; }
 export function pulse(strength = 0.6) { thump = Math.min(1, thump + strength); }
 
 /** Called on every beat (0-based beat in the loop). */
@@ -93,10 +96,10 @@ function frame() {
   spin += cooking ? 0.05 : 0;
 
   // Layout: disc on the right, poster type on the left (stacks on narrow stages).
-  const wide = w > h * 1.4;
+  const wide = !compact && w > h * 1.4;
   cx = wide ? w * 0.68 : w / 2;
-  cy = h / 2;
-  R = Math.min(wide ? w * 0.3 : w * 0.42, h * 0.44) * (1 + thump * 0.04);
+  cy = compact ? h * 0.46 : h / 2;
+  R = Math.min(wide ? w * 0.3 : w * 0.42, h * (compact ? 0.4 : 0.44)) * (1 + thump * 0.04);
 
   // Background: palette wash + slow drift, brightened by kick and snare.
   const bg = ctx.createLinearGradient(0, 0, w, h);
@@ -201,7 +204,15 @@ function frame() {
   ctx.fillStyle = "#07070c";
   ctx.beginPath(); ctx.arc(cx, cy, R * 0.025, 0, Math.PI * 2); ctx.fill();
 
-  // Poster type.
+  // Poster type (compact: one small line under the disc).
+  if (compact) {
+    ctx.font = `700 ${Math.round(11 * d)}px "IBM Plex Sans", system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.textAlign = "center";
+    ctx.fillText((title || (cooking ? "Cooking…" : "Tap a beat")).toUpperCase(), w / 2, h - 8 * d);
+    ctx.textAlign = "start";
+    if (grain) { ctx.fillStyle = ctx.createPattern(grain, "repeat"); ctx.fillRect(0, 0, w, h); }
+    return;
+  }
   const tx = wide ? w * 0.06 : w * 0.05, maxW = wide ? w * 0.42 : w * 0.9;
   const words = (title || (cooking ? "Cooking…" : "Tap a beat")).toUpperCase();
   let size = Math.min(h * 0.17, 92 * d);

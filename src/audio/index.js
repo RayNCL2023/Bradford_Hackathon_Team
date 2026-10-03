@@ -105,6 +105,19 @@ export function play() { if (started) T().Transport.start(); }
 export function stop() { if (started) { T().Transport.stop(); T().Transport.position = 0; } }
 export function setBpm(bpm) { if (started) T().Transport.bpm.value = bpm; }
 
+// Mixer: change a track type's level in dB relative to its default sound (0 = default, -60 = silent).
+const DRUM_PARTS = ["kick", "snare", "hat", "openHat", "clap", "crash"];
+const baseVol = {};
+export function setVolume(type, db) {
+  if (!started) return;
+  for (const name of type === "drums" ? DRUM_PARTS : [type]) {
+    const node = inst[name];
+    if (!node?.volume) continue;
+    if (baseVol[name] === undefined) baseVol[name] = node.volume.value;
+    node.volume.value = baseVol[name] + Number(db);
+  }
+}
+
 /** Play one note now (live keyboard). */
 export function playNote(pitch, type = "keys") {
   if (!started) return;

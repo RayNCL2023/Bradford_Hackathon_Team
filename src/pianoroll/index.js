@@ -153,3 +153,6 @@ export function setLength(note, beats) {
 
 /** Move the playhead (beats), or -1 to hide. */
 export function setPlayhead(beat) { playhead = beat; draw(); }
+
+/** Change the loop length (bars), e.g. when the producer arranges the beat to 8 bars. */
+export function setBars(n) { bars = n; resize(); draw(); }

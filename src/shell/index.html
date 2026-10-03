@@ -4,46 +4,114 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; media-src 'self' file: blob: data:; connect-src 'self' data: blob:; img-src 'self' data:" />
   <title>AI Beat Studio</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Bricolage+Grotesque:opsz,wght@12..96,800&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" />
   <link rel="stylesheet" href="shell.css" />
 </head>
 <body>
-  <header class="toolbar">
-    <div class="brand"><span class="logo"></span>AI Beat Studio</div>
-
-    <div class="moods" id="moods" role="group" aria-label="Mood"></div>
-
-    <div class="transport">
-      <button class="btn icon" id="play" title="Play (Space)">▶</button>
-      <button class="btn icon" id="stop" title="Stop">■</button>
-      <button class="btn rec" id="rec" title="Record what you play (R)" aria-pressed="false">● Rec</button>
-      <label class="bpm" title="Speed">BPM <input id="bpm" type="number" min="60" max="200" value="124" /></label>
+  <!-- TRANSPORT -->
+  <header class="transport">
+    <div class="brand"><span class="logo"></span><span>AI Beat Studio</span><span class="song" id="songName">/ Untitled</span></div>
+    <div class="tp-buttons" role="group" aria-label="Transport">
+      <button class="tbtn" id="stop" title="Stop and go to start" aria-label="Stop"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+      <button class="tbtn play" id="play" title="Play / stop (Space)" aria-label="Play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></button>
+      <button class="tbtn rec" id="rec" title="Record what you play" aria-pressed="false" aria-label="Record"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg></button>
     </div>
-
-    <button class="btn phone" id="phoneBtn"><span class="phone-dot" id="phoneDot"></span><span id="phoneLabel">Connect phone</span></button>
-    <button class="btn magic" id="produce">✦ Make it a banger</button>
+    <div class="lcd" aria-label="Display">
+      <div class="lcd-cell"><span>POSITION</span><b id="lcdPos">01.1.01</b></div>
+      <label class="lcd-cell"><span>TEMPO</span><input id="bpm" type="number" min="60" max="200" value="124" aria-label="Tempo (BPM)" /></label>
+      <div class="lcd-cell"><span>KEY LOCK</span><b class="amber" id="lcdKey">A MIN</b></div>
+      <div class="lcd-cell"><span>LOOP</span><b id="lcdBars">4 BARS</b></div>
+    </div>
+    <div class="loop-picker" role="group" aria-label="Loop length">
+      <button data-bars="1" aria-pressed="false" title="1-bar loop">1</button>
+      <button data-bars="2" aria-pressed="false" title="2-bar loop">2</button>
+      <button data-bars="4" aria-pressed="true" title="4-bar loop">4</button>
+      <button data-bars="8" aria-pressed="false" title="8-bar loop">8</button>
+      <button class="dbl" id="doubleLoop" title="Copy the loop so it's twice as long">Double it</button>
+    </div>
+    <div class="tp-right">
+      <button class="chip-btn" id="phoneBtn"><span class="phone-dot" id="phoneDot"></span><span id="phoneLabel">Connect phone</span></button>
+      <div class="master" aria-label="Master level"><i id="mL"></i><i id="mR"></i></div>
+    </div>
   </header>
 
-  <main class="layout">
-    <aside class="tracks">
-      <h2 class="side-h">Tracks</h2>
-      <ul id="trackList"></ul>
-      <button class="btn ghost" id="clear">Clear my beat</button>
-      <div class="help">
-        <b>How to play</b>
-        <p>Tap <kbd>A</kbd>–<kbd>L</kbd> and <kbd>Q</kbd>–<kbd>P</kbd>. Every key sounds good. <kbd>Z</kbd>/<kbd>X</kbd> = lower/higher.</p>
-        <p>Press <b>Rec</b>, then <b>▶</b>, and tap a rhythm. Or click the grid.</p>
+  <div class="app">
+    <!-- BROWSER -->
+    <nav class="browser" aria-label="Browser">
+      <section>
+        <h2 class="cap">Vibe</h2>
+        <div class="vibes" id="moods"></div>
+      </section>
+      <section class="grow">
+        <h2 class="cap">Vocals · ElevenLabs</h2>
+        <div id="panel" class="vocals"></div>
+      </section>
+      <div class="keys-help">
+        <b>Play</b> keys <kbd>A</kbd>–<kbd>L</kbd> / <kbd>Q</kbd>–<kbd>P</kbd> or your phone pads. Every note fits the key. <kbd>Space</kbd> play/stop.
       </div>
+    </nav>
+
+    <!-- CENTRE -->
+    <main class="centre">
+      <section class="playlist" aria-label="Playlist">
+        <div class="pl-head"><span class="cap">Playlist</span><div class="pl-ruler" id="ruler"></div></div>
+        <div id="lanes" class="lanes"></div>
+      </section>
+
+      <section class="editor" aria-label="Editor">
+        <div class="tabs" role="tablist">
+          <button role="tab" id="tab-roll" aria-selected="true">Piano roll</button>
+          <button role="tab" id="tab-rack" aria-selected="false">Channel rack</button>
+          <span class="tab-note" id="tabNote">Your melody, with the producer's parts behind it</span>
+          <button class="tbtn small ghost" id="clear" title="Clear what you played">Clear</button>
+        </div>
+        <div class="roll-wrap" id="rollWrap"><div id="roll"></div></div>
+        <div class="rack" id="rack" hidden></div>
+      </section>
+
+      <section class="bottom">
+        <div class="mixer" id="mixer" aria-label="Mixer"></div>
+        <div class="analyser" aria-label="Master analyser">
+          <span class="cap">Master analyser</span>
+          <canvas id="spectrum" height="90"></canvas>
+          <canvas id="scope" height="50"></canvas>
+          <div class="readout"><span id="peak">PEAK -∞ dB</span><span id="notesCount">0 NOTES</span></div>
+        </div>
+      </section>
+      <div class="status" id="status">Ready. Pick a vibe, connect your phone or use the keyboard, and press Rec.</div>
+    </main>
+
+    <!-- PRODUCER -->
+    <aside class="producer" aria-label="AI producer">
+      <div class="monitor">
+        <div class="stage" id="stage"></div>
+        <button class="tbtn small perf-btn" id="perfBtn" title="Full-screen performance view">Performance mode</button>
+      </div>
+      <div class="prod-head">
+        <span class="prod-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
+        <div><b>Producer</b><span id="prodSub">Gemma 4 · waiting for your beat</span></div>
+      </div>
+      <button class="big-btn" id="produce">Produce my beat</button>
+      <div class="moves">
+        <button class="move" data-ins="Add a big drop with more energy">Add a drop</button>
+        <button class="move" data-ins="Make it darker and moodier">Darker</button>
+        <button class="move" data-ins="Make the drums harder and busier">Harder drums</button>
+        <button class="move" data-ins="Write a new bassline">New bassline</button>
+      </div>
+      <button class="ghost-btn" id="arrange">Arrange my beat (8 bars, intro + drop)</button>
+      <label class="ask" for="instruction">Tell the producer
+        <span><input id="instruction" placeholder="make the hook hit harder…" autocomplete="off" /><button class="tbtn small" id="askBtn">Send</button></span>
+      </label>
+      <div class="cap">Producer notes</div>
+      <div id="notes" class="notes"><p class="muted">Notes from the producer appear here after it hears your beat.</p></div>
     </aside>
+  </div>
 
-    <section class="centre">
-      <div class="stage" id="stage"></div>
-      <div class="roll-wrap"><div id="roll"></div></div>
-      <div class="status" id="status">Ready. Pick a mood and tap out a beat.</div>
-    </section>
-
-    <aside class="panel" id="panel"></aside>
-  </main>
+  <!-- PERFORMANCE MODE -->
+  <div class="perf" id="perf" hidden>
+    <div class="perf-slot" id="perfSlot"></div>
+    <button class="tbtn perf-close" id="perfClose">Exit performance mode</button>
+  </div>
 
   <dialog id="phoneDialog" class="phone-dialog">
     <form method="dialog" class="pd-inner">
@@ -66,7 +134,7 @@
         </div>
       </div>
       <p class="pd-count" id="phoneCount">No phones connected yet.</p>
-      <button class="btn" value="close">Done</button>
+      <button class="tbtn" value="close">Done</button>
     </form>
   </dialog>
 

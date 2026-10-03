@@ -65,7 +65,15 @@ if (process.env.SMOKE) {
       await js(`document.querySelector('[data-act="make"]')?.click()`);
       for (let i = 0; i < 30 && !(await js(`!!document.querySelector('[data-fx="pitch"]')`)); i++) await wait(500);
       await js(`document.querySelector('.tone[data-tone="robot"]')?.click(); document.querySelector('[data-fx="pitch"]').value = 5; document.querySelector('[data-fx="pitch"]').dispatchEvent(new Event("change")); document.querySelector('[data-act="add"]')?.click()`);
-      await wait(4000);
+      await wait(1500);
+      // v2 producer features: apply a note, arrange, open the channel rack and add a step.
+      await js(`document.querySelector('[data-apply]')?.click()`);
+      await wait(300);
+      await js(`document.getElementById("arrange")?.click()`);
+      await wait(300);
+      await js(`document.getElementById("tab-rack")?.click(); document.querySelector('.step[data-pitch="39"][data-step="4"]')?.click()`);
+      console.log("[smoke] after v2:", await js(`JSON.stringify({ bars: document.getElementById("lcdBars").textContent, notes: document.getElementById("notesCount").textContent, done: [...document.querySelectorAll('.note.done')].map(n => n.textContent.trim()), steps: document.querySelectorAll('.step.on').length })`));
+      await wait(2500);
       const img = await win.webContents.capturePage();
       fs.writeFileSync(process.env.SMOKE_SHOT || path.join(app.getPath("temp"), "beat-smoke.png"), img.toPNG());
       console.log("[smoke] status:", await js(`document.getElementById("status").textContent`));

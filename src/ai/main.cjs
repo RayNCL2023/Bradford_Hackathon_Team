@@ -10,6 +10,8 @@ const { pathToFileURL } = require("node:url");
 
 const DRUM = { kick: 36, snare: 38, clap: 39, closedHat: 42, openHat: 46 };
 const TYPES = ["drums", "bass", "lead", "pad", "pluck"];
+// Producer-note actions the app knows how to apply (see src/shell/producer.js).
+const ACTIONS = ["drop_kick", "add_crash", "fill", "more_hats", "octave_up", "octave_down", "thin_bass"];
 let MOODS = null;
 const loadMoods = async () => (MOODS ??= (await import(pathToFileURL(path.join(__dirname, "../shared/contracts.js")).href)).MOODS);
 
@@ -28,8 +30,8 @@ ${req.instruction ? `The user asks: "${String(req.instruction).slice(0, 200)}". 
 Write each instrument as ONE BAR only (beats 0 to 4, starts on multiples of 0.25). The app repeats it for every bar and moves pitched parts along "progression" (scale steps added to every note, one number per bar, first is 0). Always include drums and bass, plus 1-3 of pad, lead, pluck. Pitched notes in the scale. Drums: 36 kick, 38 snare, 39 clap, 42 closed hat, 46 open hat. Give drums a "fill" bar for the last bar.
 
 Reply with ONLY compact JSON, no prose:
-{"title":"2-5 word catchy name","palette":["#hex","#hex","#hex"],"progression":[0,s,s,s],"tracks":[{"name":"AI Drums","type":"drums","pattern":[[pitch,start,length,velocity]],"fill":[[pitch,start,length,velocity]]},{"name":"Bass","type":"bass|pad|lead|pluck","pattern":[[pitch,start,length,velocity]]}],"vocalIdeas":[{"lyric":"short ad-lib or hook","style":"e.g. hype male shout, breathy female hook","bar":1,"reason":"one line"}],"timelineTips":[{"bar":1,"tip":"one beginner-friendly suggestion"}]}
-Exactly 3 vocalIdeas, 2-3 timelineTips, palette = 3 vivid colours for the mood.`;
+{"title":"2-5 word catchy name","palette":["#hex","#hex","#hex"],"progression":[0,s,s,s],"tracks":[{"name":"AI Drums","type":"drums","pattern":[[pitch,start,length,velocity]],"fill":[[pitch,start,length,velocity]]},{"name":"Bass","type":"bass|pad|lead|pluck","pattern":[[pitch,start,length,velocity]]}],"vocalIdeas":[{"lyric":"short ad-lib or hook","style":"e.g. hype male shout, breathy female hook","bar":1,"reason":"one line"}],"timelineTips":[{"bar":1,"tip":"short producer note in plain English","action":"one of ${ACTIONS.join("|")}","track":"drums|bass|pad|lead|pluck (for octave moves)"}]}
+Exactly 3 vocalIdeas, palette = 3 vivid colours for the mood. Give 3 timelineTips written like a real producer advising the user; each MUST use an action the app can apply: drop_kick (remove the kick in that bar to build tension), add_crash (crash at the start of that bar), fill (snare fill at the end of that bar), more_hats (16th-note hats in that bar), octave_up / octave_down (move a track), thin_bass (remove bass in that bar).`;
 }
 
 // ---------- Parse + clean ----------
@@ -105,7 +107,8 @@ function clean(raw, req, mood, source) {
       .map((v, i) => ({ id: `v${i + 1}`, lyric: String(v.lyric || "").slice(0, 60), style: String(v.style || "").slice(0, 60), bar: bar(v.bar), reason: String(v.reason || "").slice(0, 120) }))
       .filter((v) => v.lyric),
     timelineTips: (Array.isArray(raw.timelineTips) ? raw.timelineTips : []).slice(0, 3)
-      .map((t) => ({ bar: bar(t.bar), tip: String(t.tip || "").slice(0, 160) })).filter((t) => t.tip),
+      .map((t) => ({ bar: bar(t.bar), tip: String(t.tip || "").slice(0, 160), action: ACTIONS.includes(t.action) ? t.action : "none", track: TYPES.includes(t.track) ? t.track : "" }))
+      .filter((t) => t.tip),
   };
 }
 
@@ -201,8 +204,9 @@ function mockResult(req) {
       { id: "v3", lyric: "Hey! Hey! Hey!", style: "crowd chant", bar: 4, reason: "Fills the gap before the loop restarts" },
     ],
     timelineTips: [
-      { bar: 2, tip: "Drop the kick for 2 beats here to build tension" },
-      { bar: bars, tip: "Add a riser leading back to bar 1" },
+      { bar: 2, tip: "Your kick never stops. Drop it here and the next bar hits twice as hard.", action: "drop_kick", track: "" },
+      { bar: bars, tip: "End the loop with a snare fill so it rolls back to bar 1.", action: "fill", track: "" },
+      { bar: 3, tip: "Push the hats to 16ths here to lift the energy.", action: "more_hats", track: "" },
     ],
   };
 }
