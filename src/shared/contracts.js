@@ -80,8 +80,10 @@
  * @property {string} id
  * @property {string} ideaId
  * @property {string} lyric
- * @property {string} url    file:// URL, or "" if generation failed
+ * @property {string} url    Playable URL (data:audio/mpeg;base64,...), or "" if generation failed
  * @property {string} reason
+ * @property {string} [file]   Where the mp3 was saved on disk
+ * @property {string} [error]  Why it failed, shown to the user
  */
 
 export const TRACK_TYPES = ["keys", "drums", "bass", "lead", "pad", "pluck"];

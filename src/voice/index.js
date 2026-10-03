@@ -26,12 +26,14 @@ export async function showResult(result) {
     <h3 class="panel-h">Tips for your timeline</h3>
     <ul class="tips">${result.timelineTips.map((t) => `<li><span class="tag">bar ${t.bar}</span> ${esc(t.tip)}</li>`).join("")}</ul>`;
 
-  const clips = await window.api.makeVocalClips(result.vocalIdeas);
+  let clips;
+  try { clips = await window.api.makeVocalClips(result.vocalIdeas); }
+  catch (e) { clips = result.vocalIdeas.map((v) => ({ ideaId: v.id, url: "", error: e.message })); }
   for (const c of clips) {
     const idea = result.vocalIdeas.find((v) => v.id === c.ideaId);
     const box = root.querySelector(`.clip[data-id="${CSS.escape(c.ideaId)}"] .clip-actions`);
     if (!box) continue;
-    if (!c.url) { box.innerHTML = `<span class="status">Add ELEVENLABS_API_KEY to make audio</span>`; continue; }
+    if (!c.url) { box.innerHTML = `<span class="status">${esc(c.error || "Couldn't make this clip")}</span>`; continue; }
     box.innerHTML = `<button class="btn small" data-act="play">Play</button><button class="btn small accent" data-act="add">Add to track</button>`;
     const audio = new Audio(c.url);
     box.querySelector('[data-act="play"]').onclick = () => { audio.currentTime = 0; audio.play(); };
