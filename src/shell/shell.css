@@ -236,14 +236,10 @@ kbd { font: 600 11px var(--body); background: var(--bg); border: 1px solid var(-
 /* Team's pixel-art icons (Icon/*.png, drawn in Piskel) */
 img.pix { width: 18px; height: 18px; image-rendering: pixelated; display: block; flex: none; }
 .tbtn.small img.pix { width: 16px; height: 16px; }
-.tbtn.play img.pix { filter: brightness(0.25); }
-.tbtn.play.on img.pix { filter: none; }
-.tbtn.rec img.pix { filter: sepia(1) saturate(6) hue-rotate(-30deg) brightness(1.1); }
-.tbtn.rec[aria-pressed="true"] img.pix { filter: brightness(2); }
 .bpm-btns { display: grid; gap: 2px; align-content: center; padding: 0 4px; }
 .bpm-btns .tbtn { height: 18px; min-width: 26px; padding: 0 4px; }
 .bpm-btns img.pix { width: 12px; height: 12px; }
-.loop-picker > img.pix { margin-right: 2px; opacity: .8; }
+.loop-picker > img.pix { margin-right: 2px; }
 .lane-name img.pix { width: 16px; height: 16px; }
 
 /* Layers: lane buttons, armed lane, sub-lanes, clip delete, add layer */
@@ -284,3 +280,7 @@ img.pix { width: 18px; height: 18px; image-rendering: pixelated; display: block;
 .aclip span { position: absolute; left: 5px; top: 1px; font: 700 9px var(--body); color: #111216; white-space: nowrap; pointer-events: none; }
 .aclip.sel { outline: 2px solid #fff; outline-offset: 1px; }
 .aclip:hover .clip-x, .aclip.sel .clip-x { opacity: 1; }
+.lb img.pix { width: 12px; height: 12px; margin: auto; }
+.chan .mute { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.chan .mute img.pix { width: 14px; height: 14px; }
+.chan img.vol { width: 14px; height: 14px; }

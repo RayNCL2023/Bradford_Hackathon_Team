@@ -176,13 +176,13 @@ function renderLanes() {
   };
   const btns = (key, opts = {}) => `<span class="lane-btns">
       ${opts.expand ? `<button class="lb" data-expand="${esc(key)}" title="Show each drum piece">${expanded.has(key) ? "▾" : "▸"}</button>` : ""}
-      <button class="lb${opts.muted ? " on-m" : ""}" data-mute="${esc(key)}" title="Mute">M</button>
-      <button class="lb${solo === key ? " on-s" : ""}" data-solo="${esc(key)}" title="Solo">S</button>
+      <button class="lb${opts.muted ? " on-m" : ""}" data-mute="${esc(key)}" title="Mute" aria-label="Mute"><img class="pix" src="../../Icon/mute.png" alt=""></button>
+      <button class="lb${solo === key ? " on-s" : ""}" data-solo="${esc(key)}" title="Solo" aria-label="Solo"><img class="pix" src="../../Icon/solo.png" alt=""></button>
       ${opts.arm ? `<button class="lb${armedId === key ? " on-a" : ""}" data-arm="${esc(key)}" title="Arm: record and edit this layer">●</button>` : ""}
       <button class="lb" data-clearlane="${esc(key)}" title="Clear this layer">✕</button></span>`;
   const rows = [];
   for (const t of project.tracks) {
-    const icon = { drums: "drum.png", bass: "bass.png", lead: "Lead.png", pad: "Pad.png", keys: "Your beat.png" }[t.type] || "";
+    const icon = { drums: "drum.png", bass: "bass.png", lead: "Lead.png", pad: "Pad.png", keys: "Your beat.png", pluck: "plucked string.png" }[t.type] || "";
     const mark = icon ? `<img class="pix" src="../../Icon/${icon}" alt="">` : `<span class="sw" style="background:${TRACK_COLORS[t.type]}"></span>`;
     const by = t.source === "ai" ? "GEMMA" : "YOU";
     const canArm = t.type !== "drums" || t.piece !== undefined;
@@ -204,7 +204,7 @@ function renderLanes() {
   for (const c of project.clips) {
     const len = Math.min(c.lenBeats || 4, loopBeats() - Math.min(c.startBeat, loopBeats() - 0.25));
     const left = (c.startBeat / loopBeats()) * 100, width = Math.max(2, (len / loopBeats()) * 100);
-    rows.push(`<div class="lane"><div class="lane-name"><span class="ln-title"><span class="sw" style="background:var(--lilac)"></span><b>“${esc(c.name)}”</b><small>${c.kind === "sample" ? "SAMPLE" : "VOCAL"}</small></span>
+    rows.push(`<div class="lane"><div class="lane-name"><span class="ln-title"><img class="pix" src="../../Icon/${c.kind === "sample" ? "drum.png" : "vocal.png"}" alt=""><b>“${esc(c.name)}”</b><small>${c.kind === "sample" ? "SAMPLE" : "VOCAL"}</small></span>
         <span class="lane-btns"><button class="lb" data-delaudio="${esc(c.id)}" title="Remove this clip">✕</button></span></div>
       <div class="lane-clips aclips"><div class="aclip${selectedClip === c.id ? " sel" : ""}" data-aclip="${esc(c.id)}" style="left:${left}%;width:${width}%" title="Drag to move · click to select · Delete to remove">
         <span>${esc(c.kind === "sample" ? "Sample" : "Vox")} · bar ${Math.floor(c.startBeat / 4) + 1}.${Math.floor(c.startBeat % 4) + 1}</span><button class="clip-x" data-delaudio="${esc(c.id)}" title="Remove">×</button></div></div></div>`);
@@ -327,8 +327,8 @@ function renderMixer() {
     <div class="chan${c.muted ? " muted" : ""}" data-type="${c.type}">
       <div class="meters"><span class="meter"><i id="mt-${c.type}-l"></i></span><span class="meter"><i id="mt-${c.type}-r"></i></span>
         <input type="range" min="-30" max="6" step="1" value="${vols[c.type] ?? 0}" aria-label="${c.name} volume" data-vol="${c.type}"></div>
-      <span class="db" id="db-${c.type}">${(vols[c.type] ?? 0) > 0 ? "+" : ""}${vols[c.type] ?? 0} dB</span>
-      <button class="mute" data-mute="${c.type}">${c.muted ? "MUTED" : "M"}</button>
+      <img class="pix vol" src="../../Icon/volume.png" alt=""><span class="db" id="db-${c.type}">${(vols[c.type] ?? 0) > 0 ? "+" : ""}${vols[c.type] ?? 0} dB</span>
+      <button class="mute" data-mute="${c.type}" aria-label="Mute ${c.name}"><img class="pix" src="../../Icon/mute.png" alt="">${c.muted ? "MUTED" : ""}</button>
       <span class="cname" style="color:${TRACK_COLORS[c.type]}">${c.name}</span>
     </div>`).join("");
 }
