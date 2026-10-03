@@ -12,17 +12,17 @@
   <header class="transport">
     <div class="brand"><span class="logo"></span><span>AI Beat Studio</span><span class="song" id="songName">/ Untitled</span></div>
     <div class="tp-buttons" role="group" aria-label="Transport">
-      <button class="tbtn" id="stop" title="Stop and go to start" aria-label="Stop"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
-      <button class="tbtn play" id="play" title="Play / stop (Space)" aria-label="Play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></button>
-      <button class="tbtn rec" id="rec" title="Record what you play" aria-pressed="false" aria-label="Record"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg></button>
+      <button class="tbtn" id="stop" title="Stop and go to start" aria-label="Stop"><img class="pix" src="../../Icon/Stop.png" alt=""></button>
+      <button class="tbtn play" id="play" title="Play / stop (Space)" aria-label="Play"><img class="pix" src="../../Icon/Play.png" alt=""></button>
+      <button class="tbtn rec" id="rec" title="Record what you play" aria-pressed="false" aria-label="Record"><img class="pix" src="../../Icon/record.png" alt=""></button>
     </div>
     <div class="lcd" aria-label="Display">
       <div class="lcd-cell"><span>POSITION</span><b id="lcdPos">01.1.01</b></div>
-      <label class="lcd-cell"><span>TEMPO</span><input id="bpm" type="number" min="60" max="200" value="124" aria-label="Tempo (BPM)" /></label>
+      <div class="bpm-btns"><button class="tbtn small" id="bpmDown" aria-label="Slower"><img class="pix" src="../../Icon/BPM minus.png" alt=""></button><button class="tbtn small" id="bpmUp" aria-label="Faster"><img class="pix" src="../../Icon/BPM plus.png" alt=""></button></div><label class="lcd-cell"><span>TEMPO</span><input id="bpm" type="number" min="60" max="200" value="124" aria-label="Tempo (BPM)" /></label>
       <div class="lcd-cell"><span>KEY LOCK</span><b class="amber" id="lcdKey">A MIN</b></div>
       <div class="lcd-cell"><span>LOOP</span><b id="lcdBars">4 BARS</b></div>
     </div>
-    <div class="loop-picker" role="group" aria-label="Loop length">
+    <div class="loop-picker" role="group" aria-label="Loop length"><img class="pix" src="../../Icon/Loop.png" alt="Loop">
       <button data-bars="1" aria-pressed="false" title="1-bar loop">1</button>
       <button data-bars="2" aria-pressed="false" title="2-bar loop">2</button>
       <button data-bars="4" aria-pressed="true" title="4-bar loop">4</button>
@@ -68,7 +68,7 @@
           <button role="tab" id="tab-roll" aria-selected="true">Piano roll</button>
           <button role="tab" id="tab-rack" aria-selected="false">Channel rack</button>
           <span class="tab-note" id="tabNote">Your melody, with the producer's parts behind it</span>
-          <button class="tbtn small ghost" id="clear" title="Clear what you played">Clear</button>
+          <button class="tbtn small ghost" id="clear" title="Clear what you played"><img class="pix" src="../../Icon/Clear.png" alt="">Clear</button>
         </div>
         <div class="roll-wrap" id="rollWrap"><div id="roll"></div></div>
         <div class="rack" id="rack" hidden></div>

@@ -112,7 +112,9 @@ function renderLanes() {
       b = e;
     }
     const by = t.source === "ai" ? "GEMMA" : t.id === "user-drums" || t.id === "user" ? "YOU" : "";
-    return `<div class="lane${t.muted ? " muted" : ""}"><button class="lane-name" data-id="${esc(t.id)}" title="Click to mute"><span class="sw" style="background:${TRACK_COLORS[t.type]}"></span><b>${esc(t.name)}</b><small>${by}</small></button>
+    const icon = t.type === "drums" ? "drum.png" : t.id === "user" ? "Your beat.png" : "";
+    const mark = icon ? `<img class="pix" src="../../Icon/${icon}" alt="">` : `<span class="sw" style="background:${TRACK_COLORS[t.type]}"></span>`;
+    return `<div class="lane${t.muted ? " muted" : ""}"><button class="lane-name" data-id="${esc(t.id)}" title="Click to mute">${mark}<b>${esc(t.name)}</b><small>${by}</small></button>
       <div class="lane-clips" style="grid-template-columns:repeat(${bars},minmax(0,1fr))">${clips.join("")}</div></div>`;
   });
   for (const c of project.clips) {
@@ -285,6 +287,9 @@ $("play").onclick = () => (playing ? stop() : play());
 $("stop").onclick = stop;
 $("rec").onclick = toggleRec;
 $("bpm").onchange = () => { project.bpm = Math.min(200, Math.max(60, Number($("bpm").value) || 124)); $("bpm").value = project.bpm; audio.setBpm(project.bpm); refreshAll(false); syncPhones(); };
+const nudgeBpm = (d) => { $("bpm").value = Math.min(200, Math.max(60, project.bpm + d)); $("bpm").onchange(); };
+$("bpmDown").onclick = () => nudgeBpm(-1);
+$("bpmUp").onclick = () => nudgeBpm(1);
 $("clear").onclick = () => { roll.clear(); const d = project.tracks.find((t) => t.id === "user-drums"); if (d) d.notes = []; audio.loadProject(project); refreshAll(); status("Cleared what you played. The producer's parts are still there."); };
 window.addEventListener("keydown", (e) => {
   if (e.target?.closest?.("input, textarea")) return;
