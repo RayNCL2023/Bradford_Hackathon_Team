@@ -103,12 +103,13 @@ let gemini = null, geminiModel = null;
 /** Use GEMINI_MODEL if the API knows it, otherwise the best Gemma 4 model the key can see. */
 async function resolveGeminiModel(ai) {
   if (geminiModel) return geminiModel;
-  const wanted = (process.env.GEMINI_MODEL || "gemma-4-e4b-it").replace(/^models\//, "");
+  const wanted = (process.env.GEMINI_MODEL || "gemma-4-26b-a4b-it").replace(/^models\//, "");
   const names = [];
   try { for await (const m of await ai.models.list()) names.push(String(m.name).replace(/^models\//, "")); } catch { /* listing not allowed: trust the setting */ }
   if (!names.length || names.includes(wanted)) return (geminiModel = wanted);
   const gemma = names.filter((n) => /gemma/i.test(n));
-  const pick = gemma.find((n) => /gemma-4.*e4b/i.test(n)) || gemma.find((n) => /gemma-4/i.test(n)) || gemma[0];
+  // Prefer small/fast Gemma 4 variants: e4b, then the 26B mixture-of-experts (only 4B active), then anything Gemma 4.
+  const pick = gemma.find((n) => /gemma-4.*e4b/i.test(n)) || gemma.find((n) => /gemma-4.*a4b/i.test(n)) || gemma.find((n) => /gemma-4/i.test(n)) || gemma[0];
   if (!pick) throw new Error(`No Gemma model available to this key. Models: ${names.slice(0, 8).join(", ")}`);
   console.log(`[ai] GEMINI_MODEL "${wanted}" not found, using "${pick}"`);
   return (geminiModel = pick);
@@ -122,7 +123,15 @@ async function askGemini(prompt, req) {
   // Gemma models take everything in the user turn (no system prompt or JSON mode), so the prompt asks for JSON itself.
   const parts = [{ text: prompt }];
   if (req.screenshotPng) parts.unshift({ inlineData: { mimeType: "image/png", data: b64(req.screenshotPng) } });
-  const res = await gemini.models.generateContent({ model, contents: [{ role: "user", parts }], config: { temperature: 0.8, maxOutputTokens: 8192 } });
+  // Gemma 4 on the API "thinks" by default, which took ~3 minutes and used up the reply. Minimal thinking answers in seconds.
+  const call = (config) => gemini.models.generateContent({ model, contents: [{ role: "user", parts }], config });
+  let res;
+  try { res = await call({ temperature: 0.8, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: "minimal" } }); }
+  catch (e) {
+    if (!/thinking/i.test(e.message)) throw e;
+    res = await call({ temperature: 0.8, maxOutputTokens: 8192 }); // model without thinking controls
+  }
+  if (!res.text) throw new Error(`empty reply (finish reason: ${res.candidates?.[0]?.finishReason || "unknown"})`);
   return res.text;
 }
 
