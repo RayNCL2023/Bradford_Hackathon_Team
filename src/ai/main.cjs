@@ -17,6 +17,8 @@ let MOODS = null;
 const loadMoods = async () => (MOODS ??= (await import(pathToFileURL(path.join(__dirname, "../shared/contracts.js")).href)).MOODS);
 
 // ---------- Prompt ----------
+const GENRES = { house: "House (four-to-the-floor kick, offbeat open hats, warm chords)", ukgarage: "UK Garage (2-step shuffled drums, skippy hats, chopped bass)", dnb: "Drum & Bass (fast breakbeat kick-snare, rolling sub bass)", drill: "UK Drill (sliding 808 bass, triplet hats, sparse snares on 3)", trap: "Trap (808 bass, rolling hi-hat triplets, snare on 3)", afrobeats: "Afrobeats (syncopated percussion, bouncy bass, plucky melodies)", techno: "Techno (driving kick, hypnotic repetition, dark stabs)", lofi: "Lo-fi hip hop (lazy swung drums, mellow keys, soft bass)" };
+const COMPLEXITY = ["minimal: very few notes, lots of space", "simple: steady and clean", "groovy: a few syncopations and fills", "busy: lots of movement, ghost notes, extra layers", "wild: dense, adventurous rhythms and big fills"];
 // SPEED: the model writes ONE BAR per instrument plus a 4-bar chord progression; code repeats and transposes it.
 // That is ~4x fewer tokens than writing every note (a full track went from ~48 s to well under 20 s).
 function buildPrompt(req, mood) {
@@ -24,7 +26,7 @@ function buildPrompt(req, mood) {
   const riff = (req.userNotes || []).slice(0, 120).map((n) => [n.pitch, n.start, n.dur]);
   return `You are an expert dance-music producer in a beginner-friendly beat app. The user tapped a riff with no music knowledge. Make it a catchy ${bars}-bar loop.
 
-Mood: ${mood.label}. Scale: root MIDI ${mood.root}, intervals ${JSON.stringify(mood.scale)}. ${req.bpm} BPM, 4/4.
+Mood: ${mood.label}.${req.genre ? ` Genre: ${GENRES[req.genre] || req.genre} (follow its typical drum pattern, bass style and sounds).` : ""} Complexity ${req.complexity || 3}/5: ${COMPLEXITY[(req.complexity || 3) - 1]}. Scale: root MIDI ${mood.root}, intervals ${JSON.stringify(mood.scale)}. ${req.bpm} BPM, 4/4.
 User riff [pitch, startBeat, lengthBeats] over beats 0-${bars * 4}: ${JSON.stringify(riff)}
 ${req.instruction ? `The user asks: "${String(req.instruction).slice(0, 200)}". Apply it.` : ""}${req.screenshotPng ? "\nThe attached image is the piano roll; pink notes are the user's riff." : ""}
 
@@ -214,7 +216,7 @@ function mockResult(req) {
 
 // ---------- Main ----------
 const cache = new Map();
-const cacheKey = (req) => JSON.stringify([req.mood, req.bpm, req.bars, req.instruction || "", req.userNotes]);
+const cacheKey = (req) => JSON.stringify([req.mood, req.bpm, req.bars, req.instruction || "", req.genre || "", req.complexity || 3, req.userNotes]);
 
 /** @param {import("../shared/contracts.js").AiRequest} req @returns {Promise<import("../shared/contracts.js").AiResult>} */
 async function produce(req) {

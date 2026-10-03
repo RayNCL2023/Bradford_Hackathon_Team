@@ -508,7 +508,7 @@ async function produce(instruction = "") {
   if (instruction) remember(`The user asked the producer: "${instruction}".`);
   try {
     /** @type {import("../shared/contracts.js").AiResult} */
-    const result = await window.api.produce({ bpm: project.bpm, bars: project.bars, userNotes: userNotes.length ? userNotes : drums, screenshotPng: roll.screenshot(), mood, instruction });
+    const result = await window.api.produce({ bpm: project.bpm, bars: project.bars, userNotes: userNotes.length ? userNotes : drums, screenshotPng: roll.screenshot(), mood, instruction, genre: $("genre").value, complexity: Number($("complexity").value) });
     project.tracks = [...project.tracks.filter((t) => t.source === "user"), ...result.tracks];
     songTitle = result.title;
     visuals.setPalette(result.palette);
@@ -744,3 +744,18 @@ function setAB(mode) {
 }
 $("abBefore").onclick = () => setAB("before");
 $("abAfter").onclick = () => setAB("after");
+
+
+// ---------- Genre + complexity (steer the producer) ----------
+const CX = ["Minimal", "Simple", "Groovy", "Busy", "Wild"];
+$("complexity").addEventListener("input", () => { $("cxLabel").textContent = CX[Number($("complexity").value) - 1]; });
+$("complexity").addEventListener("change", () => remember(`The user set producer complexity to ${CX[Number($("complexity").value) - 1]}.`));
+$("genre").addEventListener("change", () => {
+  const o = $("genre").selectedOptions[0];
+  if (o.dataset.bpm) { $("bpm").value = o.dataset.bpm; $("bpm").onchange(); }
+  if (o.value) {
+    const name = o.text.split(" ·")[0];
+    explain("AI PRODUCER", `Genre: ${name}`, `Tempo set to ${o.dataset.bpm} BPM. The producer will write drums, bass and synths in this style.`, 3500);
+    remember(`The user chose the genre ${name}.`);
+  }
+});

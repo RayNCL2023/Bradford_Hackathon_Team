@@ -99,6 +99,22 @@
         <span class="prod-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
         <div><b>Producer</b><span id="prodSub">Gemma 4 · waiting for your beat</span></div>
       </div>
+      <div class="style-ctl">
+        <label for="genre">Genre</label>
+        <select id="genre">
+          <option value="">Auto (from the vibe)</option>
+          <option value="house" data-bpm="124">House · 124</option>
+          <option value="ukgarage" data-bpm="132">UK Garage · 132</option>
+          <option value="dnb" data-bpm="172">Drum &amp; Bass · 172</option>
+          <option value="drill" data-bpm="142">Drill · 142</option>
+          <option value="trap" data-bpm="140">Trap · 140</option>
+          <option value="afrobeats" data-bpm="105">Afrobeats · 105</option>
+          <option value="techno" data-bpm="130">Techno · 130</option>
+          <option value="lofi" data-bpm="85">Lo-fi · 85</option>
+        </select>
+        <label for="complexity">Complexity</label>
+        <div class="cx"><input id="complexity" type="range" min="1" max="5" step="1" value="3"><output id="cxLabel">Groovy</output></div>
+      </div>
       <button class="big-btn" id="produce">Produce my beat</button>
       <div class="moves">
         <button class="move" data-ins="Add a big drop with more energy">Add a drop</button>
