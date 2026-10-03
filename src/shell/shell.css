@@ -193,3 +193,20 @@ kbd { font: 600 11px var(--body); background: var(--bg); border: 1px solid var(-
 .vocals .rec-adlib[aria-pressed="true"] { background: var(--red); color: #fff; border-color: var(--red); }
 .adlib-text { height: 32px; border-radius: 6px; border: 1px solid #2E3039; background: var(--bg); color: var(--text); padding: 0 8px; font: inherit; font-size: 12px; user-select: text; min-width: 0; }
 .vocals .adlib .tone { text-transform: capitalize; }
+
+/* Samples browser */
+.samples { display: grid; gap: 6px; }
+.samples .s-head { display: flex; gap: 6px; align-items: center; }
+.samples .s-btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #2E3039; background: var(--panel-3); font-weight: 600; font-size: 12px; }
+.samples .s-btn.amber { background: var(--amber); border-color: var(--amber); color: var(--bg); }
+.samples details { background: var(--panel-2); border-radius: 8px; }
+.samples summary { cursor: pointer; padding: 6px 10px; font-weight: 600; display: flex; justify-content: space-between; list-style: none; }
+.samples summary::-webkit-details-marker { display: none; }
+.samples summary span { font: 500 11px var(--mono); color: var(--muted); }
+.samples ul { list-style: none; margin: 0; padding: 0 6px 6px; display: grid; gap: 2px; max-height: 180px; overflow-y: auto; }
+.samples li { display: flex; align-items: center; gap: 4px; }
+.samples li .nm { flex: 1; min-width: 0; text-align: left; height: 26px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+.samples li .nm:hover { background: var(--panel-3); }
+.samples li .mini { height: 24px; padding: 0 7px; border-radius: 5px; border: 1px solid #2E3039; background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.samples li .mini.on { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+.samples .s-empty { font-size: 12px; color: var(--muted); background: var(--panel-2); border-radius: 8px; padding: 10px; }

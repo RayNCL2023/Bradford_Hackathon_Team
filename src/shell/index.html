@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; media-src 'self' file: blob: data:; connect-src 'self' data: blob:; img-src 'self' data:" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; media-src 'self' file: blob: data: sample:; connect-src 'self' data: blob: sample:; img-src 'self' data:" />
   <title>AI Beat Studio</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Bricolage+Grotesque:opsz,wght@12..96,800&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" />
   <link rel="stylesheet" href="shell.css" />
@@ -41,6 +41,10 @@
       <section>
         <h2 class="cap">Vibe</h2>
         <div class="vibes" id="moods"></div>
+      </section>
+      <section>
+        <h2 class="cap">Samples</h2>
+        <div id="samples" class="samples"></div>
       </section>
       <section class="grow">
         <h2 class="cap">Vocals · ElevenLabs</h2>

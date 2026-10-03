@@ -453,3 +453,57 @@ $("phoneBtn").onclick = openPhoneDialog;
 
 refreshAll();
 syncPhones();
+
+// ---------- Sample pack (./samples) ----------
+const KIT_PARTS = ["kick", "snare", "clap", "hat", "openHat", "crash"];
+const CAT_LABELS = { kick: "Kicks", snare: "Snares", clap: "Claps", hat: "Hats", openHat: "Open hats", crash: "Crashes", loop: "Loops", bass: "808 / bass", vocal: "Vocals", perc: "Percussion", fx: "FX", other: "Other" };
+let samples = [];
+const kitChoice = {};
+async function loadSamples() {
+  const res = await window.api.listSamples?.();
+  samples = res?.samples || [];
+  if (!samples.length) {
+    $("samples").innerHTML = `<div class="s-empty">Drop a sample pack into the <b>samples</b> folder, then <button class="s-btn" id="rescan">Rescan</button></div>`;
+    $("rescan").onclick = loadSamples;
+    return;
+  }
+  const byCat = {};
+  samples.forEach((s, i) => (byCat[s.category] ||= []).push(i));
+  // Default kit: the first sample of each drum type.
+  for (const part of KIT_PARTS) if (!(part in kitChoice) && byCat[part]) kitChoice[part] = byCat[part][0];
+  const row = (i, cat) => {
+    const s = samples[i];
+    const isKit = KIT_PARTS.includes(cat);
+    const action = cat === "loop" ? `<button class="mini" data-addloop="${i}" title="Add at the current bar, looped to the end">Add</button>`
+      : isKit ? `<button class="mini${kitChoice[cat] === i ? " on" : ""}" data-kit="${cat}" data-i="${i}">Use</button>` : `<button class="mini" data-addloop="${i}" title="Add once at the current bar">Add</button>`;
+    return `<li><button class="nm" data-preview="${i}" title="${esc(s.rel)}">${esc(s.name)}${s.bpm ? ` · ${s.bpm}` : ""}</button>${action}</li>`;
+  };
+  $("samples").innerHTML = `<div class="s-head"><button class="s-btn amber" id="useKit">Use pack drums</button><button class="s-btn" id="rescan">Rescan</button></div>` +
+    Object.keys(CAT_LABELS).filter((c) => byCat[c]).map((c) =>
+      `<details${c === "loop" ? " open" : ""}><summary>${CAT_LABELS[c]}<span>${byCat[c].length}</span></summary><ul>${byCat[c].slice(0, 120).map((i) => row(i, c)).join("")}</ul></details>`).join("");
+  $("rescan").onclick = loadSamples;
+  $("useKit").onclick = async () => {
+    const urls = Object.fromEntries(KIT_PARTS.filter((p) => kitChoice[p] !== undefined).map((p) => [p, samples[kitChoice[p]].url]));
+    const loaded = await audio.loadKit(urls);
+    status(loaded.length ? `Drums now use the pack: ${loaded.join(", ")}. Phone drum pads too.` : "No drum samples found in the pack.");
+  };
+}
+$("samples").addEventListener("click", async (e) => {
+  const pv = e.target.closest("[data-preview]"), kitB = e.target.closest("[data-kit]"), add = e.target.closest("[data-addloop]");
+  if (pv) { await audio.init(); audio.previewClip(samples[Number(pv.dataset.preview)].url, {}); }
+  else if (kitB) {
+    kitChoice[kitB.dataset.kit] = Number(kitB.dataset.i);
+    kitB.closest("ul").querySelectorAll(".mini").forEach((b) => b.classList.toggle("on", b === kitB));
+    $("useKit").click();
+  } else if (add) {
+    await audio.init();
+    const s = samples[Number(add.dataset.addloop)];
+    const bar = playing ? Math.floor((audio.getBeat() % loopBeats()) / 4) + 1 : 1;
+    const loopBars = s.category === "loop" ? project.bars - bar + 1 : 0;
+    const id = await audio.addClip(s.url, (bar - 1) * 4, { sourceBpm: s.bpm || 0, loopBars });
+    project.clips.push({ id, name: s.name, url: s.url, startBeat: (bar - 1) * 4 });
+    refreshAll(false);
+    status(`Added "${s.name}" at bar ${bar}${loopBars ? `, looping to bar ${project.bars}` : ""}${s.bpm ? `, stretched from ${s.bpm} to ${project.bpm} BPM` : ""}.`);
+  }
+});
+loadSamples();

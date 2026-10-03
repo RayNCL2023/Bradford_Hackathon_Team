@@ -7,3 +7,5 @@ android/local.properties
 android/.gradle
 android/build
 android/app/build
+samples/*
+!samples/README.txt

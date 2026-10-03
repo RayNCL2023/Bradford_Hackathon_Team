@@ -1,6 +1,10 @@
 // Electron main process. Owner: Person 1 (shell).
 // AI and ElevenLabs calls run here so API keys never reach the page.
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, protocol, net } = require("electron");
+const { pathToFileURL } = require("node:url");
+
+// Sample packs live in ./samples (any folder layout). Served to the page as sample://<path> so Tone.js can fetch them.
+protocol.registerSchemesAsPrivileged([{ scheme: "sample", privileges: { standard: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -73,6 +77,15 @@ if (process.env.SMOKE) {
       await wait(300);
       await js(`document.getElementById("tab-rack")?.click(); document.querySelector('.step[data-pitch="39"][data-step="4"]')?.click()`);
       console.log("[smoke] after v2:", await js(`JSON.stringify({ bars: document.getElementById("lcdBars").textContent, notes: document.getElementById("notesCount").textContent, done: [...document.querySelectorAll('.note.done')].map(n => n.textContent.trim()), steps: document.querySelectorAll('.step.on').length })`));
+      // Sample pack (only if one is in ./samples): load the kit and add a loop.
+      if (await js(`!!document.getElementById("useKit")`)) {
+        await js(`document.getElementById("useKit").click()`);
+        await wait(1500);
+        console.log("[smoke] kit:", await js(`document.getElementById("status").textContent`));
+        await js(`document.querySelector('[data-addloop]')?.click()`);
+        await wait(1500);
+        console.log("[smoke] loop:", await js(`document.getElementById("status").textContent`));
+      }
       await wait(2500);
       const img = await win.webContents.capturePage();
       fs.writeFileSync(process.env.SMOKE_SHOT || path.join(app.getPath("temp"), "beat-smoke.png"), img.toPNG());
@@ -87,7 +100,48 @@ ipcMain.handle("ai:produce", (_e, req) => ai.produce(req));
 ipcMain.handle("voice:clips", (_e, ideas) => voice.makeVocalClips(ideas, app.getPath("userData")));
 ipcMain.handle("voice:adlib", (_e, req) => voice.makeAdlib(req, app.getPath("userData")));
 
+const SAMPLE_DIR = path.join(__dirname, "samples");
+const AUDIO_EXT = /\.(wav|mp3|ogg|flac|aif|aiff|m4a)$/i;
+/** Guess what a sample is from its file and folder names. */
+function categorise(rel) {
+  const s = rel.toLowerCase().replace(/[\\_\-.]/g, " ");
+  if (/\bloops?\b/.test(s)) return "loop";
+  if (/open ?h(i ?)?hat|\bohh?\b|open hat/.test(s)) return "openHat";
+  if (/h(i ?)?hat|\bhh\b|\bchh?\b/.test(s)) return "hat";
+  if (/kick|\bbd\b|bass ?drum/.test(s)) return "kick";
+  if (/snare|\bsd\b|\brim/.test(s)) return "snare";
+  if (/clap|\bcp\b/.test(s)) return "clap";
+  if (/crash|cymbal|\bride\b/.test(s)) return "crash";
+  if (/808|\bbass\b|sub/.test(s)) return "bass";
+  if (/vox|vocal|voice|chant|adlib/.test(s)) return "vocal";
+  if (/perc|tom|shaker|conga|bongo|tamb/.test(s)) return "perc";
+  if (/fx|riser|sweep|impact|noise|uplifter|downlifter/.test(s)) return "fx";
+  return "other";
+}
+ipcMain.handle("samples:list", () => {
+  if (!fs.existsSync(SAMPLE_DIR)) return { dir: SAMPLE_DIR, samples: [] };
+  const out = [];
+  (function walk(dir) {
+    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, f.name);
+      if (f.isDirectory()) walk(p);
+      else if (AUDIO_EXT.test(f.name) && out.length < 2000) {
+        const rel = path.relative(SAMPLE_DIR, p).split(path.sep).join("/");
+        const bpm = Number((rel.match(/(\d{2,3})\s?bpm/i) || [])[1]) || null;
+        out.push({ rel, name: f.name.replace(AUDIO_EXT, ""), folder: path.dirname(rel), category: categorise(rel), bpm, url: "sample://pack/" + rel.split("/").map(encodeURIComponent).join("/") });
+      }
+    }
+  })(SAMPLE_DIR);
+  return { dir: SAMPLE_DIR, samples: out };
+});
+
 app.whenReady().then(() => {
+  protocol.handle("sample", (req) => {
+    const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, "");
+    const file = path.join(SAMPLE_DIR, rel);
+    if (!file.startsWith(SAMPLE_DIR) || !fs.existsSync(file)) return new Response("Not found", { status: 404 });
+    return net.fetch(pathToFileURL(file).toString());
+  });
   createWindow();
   app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });

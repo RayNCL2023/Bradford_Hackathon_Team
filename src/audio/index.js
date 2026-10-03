@@ -62,10 +62,33 @@ function safeTime(name, time) {
   return t;
 }
 
+// ---------- Sample-pack kit ----------
+const DRUM_PART_OF = { [DRUM_PITCH.kick]: "kick", [DRUM_PITCH.snare]: "snare", [DRUM_PITCH.clap]: "clap", [DRUM_PITCH.closedHat]: "hat", [DRUM_PITCH.openHat]: "openHat", [DRUM_PITCH.crash]: "crash" };
+let kit = {};
+/**
+ * Use samples for the drums. @param {Record<"kick"|"snare"|"clap"|"hat"|"openHat"|"crash", string>} urls  missing parts keep the synth
+ * @returns {Promise<string[]>} the parts that loaded
+ */
+export async function loadKit(urls) {
+  if (!started) await init();
+  Object.values(kit).forEach((p) => p.dispose());
+  kit = {};
+  const loaded = [];
+  await Promise.all(Object.entries(urls).filter(([, u]) => u).map(async ([part, url]) => {
+    try { const p = new (T().Player)().toDestination(); await p.load(url); kit[part] = p; loaded.push(part); }
+    catch (e) { console.warn("[audio] kit sample failed:", part, e.message); }
+  }));
+  return loaded;
+}
+export function clearKit() { Object.values(kit).forEach((p) => p.dispose()); kit = {}; }
+
 function trigger(type, pitch, dur, time, vel) {
   try {
     if (type === "drums") {
-      if (pitch === DRUM_PITCH.kick) inst.kick.triggerAttackRelease("C1", "8n", safeTime("kick", time), vel);
+      // A loaded sample-pack kit wins over the built-in synth drums.
+      const part = DRUM_PART_OF[pitch] || "hat";
+      if (kit[part]?.loaded) { kit[part].start(safeTime("kit-" + part, time)); kit[part].volume.value = -6 + (vel - 0.9) * 10; }
+      else if (pitch === DRUM_PITCH.kick) inst.kick.triggerAttackRelease("C1", "8n", safeTime("kick", time), vel);
       else if (pitch === DRUM_PITCH.snare) inst.snare.triggerAttackRelease("16n", safeTime("snare", time), vel);
       else if (pitch === DRUM_PITCH.clap) inst.clap.triggerAttackRelease("16n", safeTime("clap", time), vel);
       else if (pitch === DRUM_PITCH.openHat) inst.openHat.triggerAttackRelease("8n", safeTime("openHat", time), vel);
@@ -168,16 +191,21 @@ async function loadPlayer(url) {
 /**
  * Put an audio sample (e.g. a vocal clip) on the timeline.
  * @param {string} url @param {number} startBeat
- * @param {{pitch?:number, tone?:string, volume?:number}} [opts] pitch in semitones (-12..12), tone = a TONES key
+ * @param {{pitch?:number, tone?:string, volume?:number, sourceBpm?:number, loopBars?:number}} [opts]
+ *   pitch in semitones (-12..12), tone = a TONES key. For pack loops: sourceBpm time-stretches the loop to the song tempo,
+ *   loopBars repeats it for that many bars.
  * @returns {Promise<string>} clip id, for updateClip()
  */
 export async function addClip(url, startBeat, opts = {}) {
   if (!started || !url) return "";
   const id = Math.random().toString(36).slice(2);
   const player = await loadPlayer(url);
+  if (opts.sourceBpm) player.playbackRate = T().Transport.bpm.value / opts.sourceBpm;
+  if (opts.loopBars) player.loop = true;
   const chain = buildChain(opts);
   player.connect(chain[0]);
   player.sync().start(ticks(startBeat));
+  if (opts.loopBars) player.stop(ticks(startBeat + opts.loopBars * 4));
   clips.set(id, { player, chain, opts: { ...opts }, startBeat });
   return id;
 }
