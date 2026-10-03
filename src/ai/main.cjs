@@ -103,7 +103,7 @@ let gemini = null, geminiModel = null;
 /** Use GEMINI_MODEL if the API knows it, otherwise the best Gemma 4 model the key can see. */
 async function resolveGeminiModel(ai) {
   if (geminiModel) return geminiModel;
-  const wanted = (process.env.GEMINI_MODEL || "").replace(/^models\//, "");
+  const wanted = (process.env.GEMINI_MODEL || "gemma-4-e4b-it").replace(/^models\//, "");
   const names = [];
   try { for await (const m of await ai.models.list()) names.push(String(m.name).replace(/^models\//, "")); } catch { /* listing not allowed: trust the setting */ }
   if (!names.length || names.includes(wanted)) return (geminiModel = wanted);
