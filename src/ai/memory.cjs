@@ -34,20 +34,25 @@ async function recall(query) {
 let queue = [];
 let timer = null;
 let lastSent = 0;
+let inFlight = false; // a remember call can take minutes (NMAFC retries on rate limits): never stack them
 const listeners = [];
+const notify = (r) => listeners.forEach((fn) => { try { fn(r); } catch {} });
 function flush() {
   timer = null;
   if (!queue.length) return;
+  if (inFlight) { timer = setTimeout(flush, 20000); return; }
   const messages = queue.splice(0).map((content) => ({ role: "user", content }));
   lastSent = Date.now();
+  inFlight = true;
   call("/v1/memories", { agent_id: AGENT(), messages }, 180000)
-    .then((r) => listeners.forEach((fn) => fn({ ok: true, stored: r.updates_ingested || 0 })))
-    .catch((e) => listeners.forEach((fn) => fn({ ok: false, error: e.message })));
+    .then((r) => notify({ ok: true, stored: r.updates_ingested || 0 }), (e) => notify({ ok: false, error: e.message }))
+    .finally(() => { inFlight = false; });
 }
 /** Tell the memory what the producer just saw the user do (plain English). */
 function remember(event) {
   if (!event) return;
   queue.push(String(event).slice(0, 400));
+  if (queue.length > 20) queue.splice(0, queue.length - 20); // keep the newest 20 while a slow call is running
   if (!timer) timer = setTimeout(flush, Math.max(0, 20000 - (Date.now() - lastSent)));
 }
 function onStored(fn) { listeners.push(fn); }

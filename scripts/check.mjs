@@ -26,10 +26,11 @@ for (const f of files) {
 
 // Each module must keep exporting the functions other modules rely on.
 const REQUIRED = {
-  "src/pianoroll/index.js": ["mount", "getNotes", "setTracks", "screenshot", "setPlayhead", "setMood", "clear", "hit", "setLength", "setBars"],
-  "src/audio/index.js": ["init", "loadProject", "play", "stop", "setBpm", "playNote", "getBeat", "addClip", "updateClip", "previewClip", "onNote", "getSpectrum", "TONES", "setVolume"],
+  "src/pianoroll/index.js": ["mount", "getNotes", "setTracks", "screenshot", "setPlayhead", "setMood", "clear", "hit", "setLength", "setBars", "setActive", "setQuantize"],
+  "src/audio/index.js": ["init", "loadProject", "play", "stop", "setBpm", "playNote", "getBeat", "addClip", "updateClip", "previewClip", "onNote", "getSpectrum", "TONES", "setVolume", "loadKit"],
   "src/voice/index.js": ["mountPanel", "showResult"],
   "src/visuals/index.js": ["mount", "setPalette", "pulse", "setTitle", "setTracks", "setMeta", "noteOn", "beat", "setSpectrumSource", "setClock", "setCooking", "setCompact"],
+  "src/shell/producer.js": ["applyTip", "arrange", "ACTION_LABELS"],
 };
 for (const [file, names] of Object.entries(REQUIRED)) {
   const src = fs.readFileSync(path.join(root, file), "utf8");
@@ -40,7 +41,7 @@ for (const [file, names] of Object.entries(REQUIRED)) {
     }
   }
 }
-const REQUIRED_CJS = { "src/ai/main.cjs": ["produce"], "src/voice/main.cjs": ["makeVocalClips"] };
+const REQUIRED_CJS = { "src/ai/main.cjs": ["produce"], "src/ai/memory.cjs": ["remember", "list", "onStored"], "src/voice/main.cjs": ["makeVocalClips", "makeAdlib"], "src/remote/server.cjs": ["startRemote"] };
 for (const [file, names] of Object.entries(REQUIRED_CJS)) {
   const mod = (await import("node:module")).createRequire(import.meta.url)(path.join(root, file));
   for (const n of names) if (typeof mod[n] !== "function") { failed++; console.error(`✗ ${file} no longer exports ${n}()`); }

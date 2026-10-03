@@ -76,8 +76,10 @@ export function arrange(project) {
   if (project.bars >= 8) return "";
   const len = project.bars * 4;
   for (const t of project.tracks) {
-    const copy = t.notes.map((n) => ({ ...n, start: n.start + len }));
-    let first = t.notes;
+    // Only the notes inside the current loop (a shorter loop can leave notes past its end).
+    const inside = t.notes.filter((n) => n.start < len);
+    const copy = inside.map((n) => ({ ...n, start: n.start + len }));
+    let first = inside;
     if (t.source === "ai") {
       // Intro: strip the kick and bass from the first two bars so the drop lands.
       if (t.type === "bass") first = first.filter((n) => n.start >= 8);

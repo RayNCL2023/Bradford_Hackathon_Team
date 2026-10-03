@@ -23,10 +23,11 @@ const COMPLEXITY = ["minimal: very few notes, lots of space", "simple: steady an
 // That is ~4x fewer tokens than writing every note (a full track went from ~48 s to well under 20 s).
 function buildPrompt(req, mood) {
   const bars = req.bars || 4;
+  const cx = Math.min(5, Math.max(1, Math.round(Number(req.complexity)) || 3));
   const riff = (req.userNotes || []).slice(0, 120).map((n) => [n.pitch, n.start, n.dur]);
   return `You are an expert dance-music producer in a beginner-friendly beat app. The user tapped a riff with no music knowledge. Make it a catchy ${bars}-bar loop.
 
-Mood: ${mood.label}.${req.genre ? ` Genre: ${GENRES[req.genre] || req.genre} (follow its typical drum pattern, bass style and sounds).` : ""} Complexity ${req.complexity || 3}/5: ${COMPLEXITY[(req.complexity || 3) - 1]}. Scale: root MIDI ${mood.root}, intervals ${JSON.stringify(mood.scale)}. ${req.bpm} BPM, 4/4.
+Mood: ${mood.label}.${req.genre ? ` Genre: ${GENRES[req.genre] || req.genre} (follow its typical drum pattern, bass style and sounds).` : ""} Complexity ${cx}/5: ${COMPLEXITY[cx - 1]}. Scale: root MIDI ${mood.root}, intervals ${JSON.stringify(mood.scale)}. ${req.bpm} BPM, 4/4.
 User riff [pitch, startBeat, lengthBeats] over beats 0-${bars * 4}: ${JSON.stringify(riff)}
 ${req.instruction ? `The user asks: "${String(req.instruction).slice(0, 200)}". Apply it.` : ""}${req.screenshotPng ? "\nThe attached image is the piano roll; pink notes are the user's riff." : ""}
 
@@ -44,7 +45,26 @@ function extractJson(text) {
   const body = fence ? fence[1] : text;
   const a = body.indexOf("{"), b = body.lastIndexOf("}");
   if (a < 0 || b <= a) throw new Error("no JSON in reply");
-  return JSON.parse(body.slice(a, b + 1));
+  const chunk = body.slice(a, b + 1);
+  try { return JSON.parse(chunk); } catch (e) {
+    // Messy replies: trailing commas, prose with braces, or two objects. Try the first balanced object that parses.
+    const noCommas = (t) => t.replace(/,\s*([}\]])/g, "$1");
+    try { return JSON.parse(noCommas(chunk)); } catch { /* keep looking */ }
+    for (let i = body.indexOf("{"); i >= 0; i = body.indexOf("{", i + 1)) {
+      let depth = 0, str = false;
+      for (let j = i; j < body.length; j++) {
+        const c = body[j];
+        if (str) { if (c === "\\") j++; else if (c === '"') str = false; continue; }
+        if (c === '"') str = true;
+        else if (c === "{") depth++;
+        else if (c === "}" && --depth === 0) {
+          try { const o = JSON.parse(noCommas(body.slice(i, j + 1))); if (o && Array.isArray(o.tracks)) return o; } catch { /* next */ }
+          break;
+        }
+      }
+    }
+    throw e;
+  }
 }
 
 const inScale = (p, mood) => mood.scale.includes((((p - mood.root) % 12) + 12) % 12);
@@ -64,7 +84,7 @@ function moveByDegrees(pitch, steps, mood) {
   return mood.root + 12 * Math.floor(idx / len) + mood.scale[((idx % len) + len) % len];
 }
 
-const toNote = (n) => (Array.isArray(n) ? { pitch: n[0], start: n[1], dur: n[2], vel: n[3] } : n);
+const toNote = (n) => (Array.isArray(n) ? { pitch: n[0], start: n[1], dur: n[2], vel: n[3] } : n || {});
 const tidy = (n) => ({ pitch: Math.round(Number(n.pitch)), start: Math.round(Number(n.start) * 4) / 4, dur: Number(n.dur), vel: Math.min(1, Math.max(0.2, Number(n.vel) || 0.8)) });
 
 /** Turn one track from the reply into full-length notes. Accepts the 1-bar "pattern" form or a full "notes" list. */
@@ -93,8 +113,9 @@ function clean(raw, req, mood, source) {
   const bars = req.bars || 4;
   if (!raw || !Array.isArray(raw.tracks)) throw new Error("reply has no tracks");
   const progression = Array.isArray(raw.progression) && raw.progression.length ? raw.progression.slice(0, 16) : [0];
-  const tracks = raw.tracks.slice(0, 6).map((t, i) => {
-    const type = TYPES.includes(t.type) ? t.type : "lead";
+  const tracks = raw.tracks.filter((t) => t && typeof t === "object").slice(0, 6).map((t, i) => {
+    const ty = String(t.type || "").toLowerCase();
+    const type = TYPES.includes(ty) ? ty : /drum|perc|beat/.test(ty) ? "drums" : /bass|808/.test(ty) ? "bass" : "lead";
     const notes = expandTrack(t, type, mood, bars, progression).filter((n) => n.pitch >= 24 && n.pitch <= 108);
     return { id: `ai-${type}-${i}`, name: String(t.name || `AI ${type}`).slice(0, 24), type, source: "ai", notes };
   }).filter((t) => t.notes.length);
@@ -106,10 +127,10 @@ function clean(raw, req, mood, source) {
     source, tracks,
     title: String(raw.title || "Untitled Banger").slice(0, 40),
     palette: palette.length >= 2 ? palette.slice(0, 3) : ["#ff3d7f", "#7b2ff7", "#00e5ff"],
-    vocalIdeas: (Array.isArray(raw.vocalIdeas) ? raw.vocalIdeas : []).slice(0, 3)
+    vocalIdeas: (Array.isArray(raw.vocalIdeas) ? raw.vocalIdeas : []).filter(Boolean).slice(0, 3)
       .map((v, i) => ({ id: `v${i + 1}`, lyric: String(v.lyric || "").slice(0, 60), style: String(v.style || "").slice(0, 60), bar: bar(v.bar), reason: String(v.reason || "").slice(0, 120) }))
       .filter((v) => v.lyric),
-    timelineTips: (Array.isArray(raw.timelineTips) ? raw.timelineTips : []).slice(0, 3)
+    timelineTips: (Array.isArray(raw.timelineTips) ? raw.timelineTips : []).filter(Boolean).slice(0, 3)
       .map((t) => ({ bar: bar(t.bar), tip: String(t.tip || "").slice(0, 160), action: ACTIONS.includes(t.action) ? t.action : "none", track: TYPES.includes(t.track) ? t.track : "" }))
       .filter((t) => t.tip),
   };

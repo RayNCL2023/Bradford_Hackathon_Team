@@ -11,7 +11,7 @@ const fs = require("node:fs");
 // Load .env (KEY=VALUE lines) without extra packages.
 const envFile = path.join(__dirname, ".env");
 if (fs.existsSync(envFile)) {
-  for (const line of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
+  for (const line of fs.readFileSync(envFile, "utf8").replace(/^﻿/, "").split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
     if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
   }
@@ -56,6 +56,10 @@ function createWindow() {
 // SMOKE=1 npm start: drives the app automatically (no paid calls), saves a screenshot, logs errors, quits.
 if (process.env.SMOKE) {
   app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+  // Keep painting when the window is covered by other windows, so the screenshot shows the real final state.
+  app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
+  app.commandLine.appendSwitch("disable-renderer-backgrounding");
+  app.commandLine.appendSwitch("disable-background-timer-throttling");
   app.whenReady().then(() => setTimeout(async () => {
     const win = BrowserWindow.getAllWindows()[0];
     const js = (code) => win.webContents.executeJavaScript(code, true);
@@ -87,8 +91,14 @@ if (process.env.SMOKE) {
         console.log("[smoke] loop:", await js(`document.getElementById("status").textContent`));
       }
       await wait(2500);
-      const img = await win.webContents.capturePage();
-      fs.writeFileSync(process.env.SMOKE_SHOT || path.join(app.getPath("temp"), "beat-smoke.png"), img.toPNG());
+      // capturePage can fail (UnknownVizError) when the window is hidden or covered: retry once in front, never abort the run.
+      const shot = process.env.SMOKE_SHOT || path.join(app.getPath("temp"), "beat-smoke.png");
+      try {
+        let img;
+        try { img = await win.webContents.capturePage(); } catch (_) { win.show(); win.focus(); await wait(800); img = await win.webContents.capturePage(); }
+        fs.writeFileSync(shot, img.toPNG());
+        console.log("[smoke] screenshot:", shot);
+      } catch (e) { console.log("[smoke] screenshot failed:", e.message); }
       console.log("[smoke] status:", await js(`document.getElementById("status").textContent`));
       console.log("[smoke] panel:", (await js(`document.getElementById("panel").innerText`)).replace(/\s+/g, " ").slice(0, 300));
     } catch (e) { console.log("[smoke] FAILED:", e.message); }
@@ -126,10 +136,12 @@ ipcMain.handle("samples:list", () => {
   if (!fs.existsSync(SAMPLE_DIR)) return { dir: SAMPLE_DIR, samples: [] };
   const out = [];
   (function walk(dir) {
-    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; } // unreadable folder: skip it, keep the rest
+    for (const f of entries) {
       const p = path.join(dir, f.name);
       if (f.isDirectory()) walk(p);
-      else if (AUDIO_EXT.test(f.name) && out.length < 2000) {
+      else if (AUDIO_EXT.test(f.name) && !f.name.startsWith("._") && out.length < 2000) {
         const rel = path.relative(SAMPLE_DIR, p).split(path.sep).join("/");
         const bpm = Number((rel.match(/(\d{2,3})\s?bpm/i) || [])[1]) || null;
         out.push({ rel, name: f.name.replace(AUDIO_EXT, ""), folder: path.dirname(rel), category: categorise(rel), bpm, url: "sample://pack/" + rel.split("/").map(encodeURIComponent).join("/") });
@@ -143,7 +155,7 @@ app.whenReady().then(() => {
   protocol.handle("sample", (req) => {
     const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, "");
     const file = path.join(SAMPLE_DIR, rel);
-    if (!file.startsWith(SAMPLE_DIR) || !fs.existsSync(file)) return new Response("Not found", { status: 404 });
+    if (!file.startsWith(SAMPLE_DIR + path.sep) || !fs.existsSync(file)) return new Response("Not found", { status: 404 });
     return net.fetch(pathToFileURL(file).toString());
   });
   createWindow();

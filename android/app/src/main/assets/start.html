@@ -54,6 +54,7 @@ document.getElementById("addr").value = bridge ? bridge.lastUrl() : "";
 document.getElementById("scan").onclick = () => bridge && bridge.scan();
 document.getElementById("usb").onclick = () => bridge && bridge.usb();
 document.getElementById("go").onclick = () => bridge && bridge.open(document.getElementById("addr").value);
+document.getElementById("addr").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); document.getElementById("go").click(); } };
 </script>
 </body>
 </html>

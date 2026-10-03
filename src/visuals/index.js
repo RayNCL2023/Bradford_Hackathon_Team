@@ -16,7 +16,7 @@ let cooking = false;
 let compact = false; // small panel view: disc centred, one-line title
 let thump = 0, flash = 0, spin = 0, t = 0;
 let rings = [], sparks = [], flares = new Map();
-let grain = null;
+let grain = null, grainPat = null;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Ring layout (fraction of disc radius) per track type.
@@ -31,17 +31,32 @@ export function mount(host) {
   const fit = () => { canvas.width = el.clientWidth * devicePixelRatio; canvas.height = el.clientHeight * devicePixelRatio; makeGrain(); };
   new ResizeObserver(fit).observe(el);
   fit();
-  el.addEventListener("dblclick", () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen?.()).catch?.(() => {}));
+  el.addEventListener("dblclick", () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen?.())?.catch?.(() => {}));
   el.title = "Double-click for full screen";
   requestAnimationFrame(frame);
 }
 
-export function setPalette(colors) { if (colors?.length >= 2) palette = colors.slice(0, 3); }
-export function setTitle(text) { title = text || ""; }
+const DEFAULT_PALETTE = ["#ff3d7f", "#7b2ff7", "#00e5ff"];
+// Accept #rgb / #rrggbb only; always keep exactly 3 colours (palette[2] is used every frame).
+const normHex = (c) => {
+  const m = typeof c === "string" && c.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!m) return null;
+  const h = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1];
+  return `#${h.toLowerCase()}`;
+};
+export function setPalette(colors) {
+  const ok = (Array.isArray(colors) ? colors : []).map(normHex).filter(Boolean).slice(0, 3);
+  if (ok.length < 2) return;
+  palette = [ok[0], ok[1], ok[2] || ok[0]];
+}
+export function setTitle(text) { title = String(text ?? "").trim(); }
 /** @param {{bpm?:number, mood?:string, key?:string}} m */
 export function setMeta(m) { meta = [m.mood, m.bpm && `${m.bpm} BPM`, m.key].filter(Boolean).join("  ·  ").toUpperCase(); }
 /** @param {import("../shared/contracts.js").Track[]} list @param {number} bars */
-export function setTracks(list, bars = 4) { tracks = list.filter((x) => !x.muted); totalBeats = bars * 4; }
+export function setTracks(list, bars = 4) {
+  tracks = (list || []).filter((x) => x && !x.muted && Array.isArray(x.notes));
+  totalBeats = Math.max(1, Number(bars) || 4) * 4;
+}
 export function setSpectrumSource(fn) { spectrum = fn; }
 export function setClock(fn) { clock = fn; }
 export function setCooking(on) { cooking = on; }
@@ -85,6 +100,7 @@ function makeGrain() {
   const g = grain.getContext("2d"), img = g.createImageData(128, 128);
   for (let i = 0; i < img.data.length; i += 4) { const v = Math.random() * 255; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 14; }
   g.putImageData(img, 0, 0);
+  grainPat = ctx.createPattern(grain, "repeat"); // cached: no new pattern object every frame
 }
 
 function frame() {
@@ -96,10 +112,12 @@ function frame() {
   spin += cooking ? 0.05 : 0;
 
   // Layout: disc on the right, poster type on the left (stacks on narrow stages).
-  const wide = !compact && w > h * 1.4;
+  // Double-click full screen of the small panel shows the full poster layout.
+  const small = compact && document.fullscreenElement !== el;
+  const wide = !small && w > h * 1.4;
   cx = wide ? w * 0.68 : w / 2;
-  cy = compact ? h * 0.46 : h / 2;
-  R = Math.min(wide ? w * 0.3 : w * 0.42, h * (compact ? 0.4 : 0.44)) * (1 + thump * 0.04);
+  cy = small ? h * 0.46 : h / 2;
+  R = Math.min(wide ? w * 0.3 : w * 0.42, h * (small ? 0.4 : 0.44)) * (1 + thump * 0.04);
 
   // Background: palette wash + slow drift, brightened by kick and snare.
   const bg = ctx.createLinearGradient(0, 0, w, h);
@@ -205,38 +223,42 @@ function frame() {
   ctx.beginPath(); ctx.arc(cx, cy, R * 0.025, 0, Math.PI * 2); ctx.fill();
 
   // Poster type (compact: one small line under the disc).
-  if (compact) {
+  if (small) {
     ctx.font = `700 ${Math.round(11 * d)}px "IBM Plex Sans", system-ui, sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.textAlign = "center";
-    ctx.fillText((title || (cooking ? "Cooking…" : "Tap a beat")).toUpperCase(), w / 2, h - 8 * d);
+    ctx.fillText((title || (cooking ? "Cooking…" : "Tap a beat")).toUpperCase(), w / 2, h - 8 * d, Math.max(1, w - 16 * d));
     ctx.textAlign = "start";
-    if (grain) { ctx.fillStyle = ctx.createPattern(grain, "repeat"); ctx.fillRect(0, 0, w, h); }
+    if (grainPat) { ctx.fillStyle = grainPat; ctx.fillRect(0, 0, w, h); }
     return;
   }
-  const tx = wide ? w * 0.06 : w * 0.05, maxW = wide ? w * 0.42 : w * 0.9;
+  // Keep the title column clear of the disc + spectrum halo (on 16:10 screens the disc starts near 40%).
+  const tx = wide ? w * 0.06 : w * 0.05, maxW = wide ? Math.max(w * 0.2, Math.min(w * 0.42, cx - R * 1.3 - tx)) : w * 0.9;
   const words = (title || (cooking ? "Cooking…" : "Tap a beat")).toUpperCase();
   let size = Math.min(h * 0.17, 92 * d);
   ctx.font = `800 ${size}px "Bricolage Grotesque", system-ui, sans-serif`;
-  const lines = wrap(words, maxW);
-  while (lines.length * size * 0.95 > h * 0.62 && size > 18 * d) { size *= 0.9; ctx.font = `800 ${size}px "Bricolage Grotesque", system-ui, sans-serif`; lines.splice(0, lines.length, ...wrap(words, maxW)); }
+  let lines = wrap(words, maxW);
+  // Shrink until it fits: height, at most 4 lines, and no single word wider than the column.
+  const widest = () => Math.max(...lines.map((ln) => ctx.measureText(ln).width));
+  while ((lines.length * size * 0.95 > h * 0.62 || lines.length > 4 || widest() > maxW) && size > 18 * d) { size *= 0.9; ctx.font = `800 ${size}px "Bricolage Grotesque", system-ui, sans-serif`; lines = wrap(words, maxW); }
+  lines = lines.slice(0, 4);
   const ty = wide ? h * 0.5 - (lines.length * size * 0.92) / 2 + size * 0.8 : h * 0.16 + size;
   const jitter = flash * 6 * d;
   lines.forEach((ln, i) => {
     const y = ty + i * size * 0.92;
     ctx.globalCompositeOperation = "lighter";
-    ctx.fillStyle = hexA(palette[0], 0.85); ctx.fillText(ln, tx - jitter, y);
-    ctx.fillStyle = hexA(palette[2], 0.85); ctx.fillText(ln, tx + jitter, y);
+    ctx.fillStyle = hexA(palette[0], 0.85); ctx.fillText(ln, tx - jitter, y, maxW);
+    ctx.fillStyle = hexA(palette[2], 0.85); ctx.fillText(ln, tx + jitter, y, maxW);
     ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "#fff"; ctx.fillText(ln, tx, y);
+    ctx.fillStyle = "#fff"; ctx.fillText(ln, tx, y, maxW);
   });
   if (meta) {
     ctx.font = `600 ${Math.max(10 * d, size * 0.17)}px "IBM Plex Sans", system-ui, sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.fillText(meta, tx, ty + lines.length * size * 0.92 + size * 0.05);
+    ctx.fillText(meta, tx, ty + lines.length * size * 0.92 + size * 0.05, maxW);
   }
 
   // Film grain on top for texture.
-  if (grain) { ctx.fillStyle = ctx.createPattern(grain, "repeat"); ctx.fillRect(0, 0, w, h); }
+  if (grainPat) { ctx.fillStyle = grainPat; ctx.fillRect(0, 0, w, h); }
 }
 
 function wrap(text, maxW) {
@@ -246,7 +268,7 @@ function wrap(text, maxW) {
     if (ctx.measureText(test).width > maxW && line) { out.push(line); line = word; } else line = test;
   }
   if (line) out.push(line);
-  return out.slice(0, 4);
+  return out;
 }
 function hexA(hex, a) {
   const n = parseInt(hex.slice(1), 16);

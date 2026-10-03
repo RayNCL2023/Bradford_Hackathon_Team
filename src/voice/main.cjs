@@ -33,7 +33,8 @@ async function listVoices() {
 
 /** Pick a voice whose labels match the requested style ("breathy female hook" -> a female voice). */
 function pickVoice(voices, style, index) {
-  const s = style.toLowerCase();
+  if (!voices?.length) throw new Error("No voices found on this ElevenLabs account.");
+  const s = String(style || "").toLowerCase();
   const want = /female|woman|girl|diva|her\b/.test(s) ? "female" : /male|man|guy|deep|mc|rapper|his\b/.test(s) ? "male" : null;
   const text = (v) => `${v.name} ${Object.values(v.labels || {}).join(" ")} ${v.description || ""}`.toLowerCase();
   let pool = want ? voices.filter((v) => (v.labels?.gender || "").toLowerCase() === want) : voices;
@@ -113,6 +114,8 @@ function beepWav() {
  * @returns {Promise<import("../shared/contracts.js").VocalClip[]>}
  */
 async function makeVocalClips(ideas, saveDir) {
+  // Ideas come from the AI: never trust lyric/style to be strings.
+  ideas = (Array.isArray(ideas) ? ideas : []).map((v) => ({ ...v, lyric: String(v?.lyric ?? "").trim() || "Hey", style: String(v?.style ?? "") }));
   const base = (v) => ({ id: `clip-${v.id}`, ideaId: v.id, lyric: v.lyric, reason: v.reason });
   const empty = (v, error) => ({ ...base(v), url: "", error });
 
@@ -137,7 +140,7 @@ async function makeVocalClips(ideas, saveDir) {
     const v = ideas[i];
     const sfx = isEffect(v.style);
     if (sfx && spent.sfx >= maxSfx()) { out[i] = empty(v, `Sound-effect limit reached (${maxSfx()} this session). Raise ELEVENLABS_MAX_SFX to allow more.`); continue; }
-    if (!sfx && spent.chars + v.lyric.length > maxChars()) { out[i] = empty(v, `Credit cap reached (${maxChars()} characters this session). Raise ELEVENLABS_MAX_CHARS to allow more.`); continue; }
+    if (!sfx && spent.chars + Math.min(80, v.lyric.length) > maxChars()) { out[i] = empty(v, `Credit cap reached (${maxChars()} characters this session). Raise ELEVENLABS_MAX_CHARS to allow more.`); continue; }
     try {
       const buf = sfx
         ? await soundEffect(`${v.lyric}, ${v.style}, for a dance track`)
@@ -161,6 +164,7 @@ function usage() { return { chars: spent.chars, maxChars: maxChars(), sfx: spent
 // a typed line is spoken in the chosen style. Capped: 5 s per recording, ELEVENLABS_MAX_STS conversions per session.
 const maxSts = () => Number(process.env.ELEVENLABS_MAX_STS ?? 3);
 spent.sts = 0;
+let adlibCount = 0;
 
 async function speechToSpeech(voiceId, audio, mime) {
   const form = new FormData();
@@ -178,9 +182,10 @@ async function speechToSpeech(voiceId, audio, mime) {
  * @returns {Promise<import("../shared/contracts.js").VocalClip>}
  */
 async function makeAdlib(req, saveDir) {
+  req = req || {};
   const style = String(req.style || "hype shout").slice(0, 60);
   const lyric = String(req.text || "").trim().slice(0, 80) || "Your ad-lib";
-  const id = `adlib-${Date.now()}`;
+  const id = `adlib-${Date.now()}-${++adlibCount}`;
   const base = { id, ideaId: id, lyric, reason: `Your ad-lib, voiced as ${style}` };
   if (mock()) return { ...base, url: toUrl(beepWav(), "audio/wav"), note: "Test beep (ELEVENLABS_MOCK=1, no credit used)" };
   if (!key()) return { ...base, url: "", error: "Add ELEVENLABS_API_KEY to .env to make audio" };

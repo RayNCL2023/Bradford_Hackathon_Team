@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
             addJavascriptInterface(Bridge(), "Pads")
             webViewClient = object : WebViewClient() {
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                    if (request.isForMainFrame) showStart("Couldn't reach the studio at ${request.url.host}:${request.url.port}. Is the AI Beat Studio app open?")
+                    if (request.isForMainFrame) showStart("Couldn't reach the studio at ${request.url.authority}. Is the AI Beat Studio app open?")
                 }
             }
         }
@@ -59,10 +59,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openStudio(raw: String) {
-        var url = raw.trim()
+        var url = raw.trim().replace(" ", "")
         if (url.isEmpty()) return
-        if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
-        if (Uri.parse(url).port == -1) url = url.trimEnd('/') + ":7777"
+        val lower = url.lowercase()
+        url = when {
+            lower.startsWith("http://") -> "http://" + url.substring(7)
+            lower.startsWith("https://") -> "https://" + url.substring(8)
+            else -> "http://$url"
+        }
+        val uri = Uri.parse(url)
+        if (uri.host.isNullOrEmpty()) { showStart("That address doesn't look right. It should look like 192.168.1.20:7777"); return }
+        // No port typed: the studio's pad server is on 7777 (keep any path/query intact).
+        if (uri.port == -1 && uri.scheme == "http") url = uri.buildUpon().encodedAuthority("${uri.host}:7777").build().toString()
         prefs.edit().putString("last", url).apply()
         web.loadUrl(url)
     }

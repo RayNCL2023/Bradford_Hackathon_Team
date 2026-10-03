@@ -40,9 +40,10 @@ function findAdb() {
  */
 function startRemote(hooks) {
   const server = http.createServer((req, res) => {
-    const url = decodeURIComponent((req.url || "/").split("?")[0]);
+    let url = "";
+    try { url = decodeURIComponent((req.url || "/").split("?")[0]); } catch { /* malformed URL -> 404 */ }
     const file = path.join(PAGE_DIR, url === "/" ? "pad.html" : url);
-    if (!file.startsWith(PAGE_DIR) || !fs.existsSync(file) || fs.statSync(file).isDirectory() || file.endsWith(".cjs")) {
+    if (!url || !file.startsWith(PAGE_DIR + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory() || file.endsWith(".cjs")) {
       res.writeHead(404); res.end("Not found"); return;
     }
     res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream", "Cache-Control": "no-store" });
@@ -65,6 +66,7 @@ function startRemote(hooks) {
   });
 
   server.on("error", (e) => console.log(`[remote] server error: ${e.message}`));
+  wss.on("error", () => { /* re-emitted server errors (e.g. port in use) are logged above; don't crash */ });
   server.listen(PORT, "0.0.0.0", () => console.log(`[remote] phone pads on port ${PORT}`));
 
   let usb = { adb: !!findAdb(), linked: false, devices: 0 };
@@ -75,7 +77,7 @@ function startRemote(hooks) {
     return new Promise((resolve) => {
       execFile(adb, ["devices"], { timeout: 5000 }, (err, out) => {
         const devices = err ? 0 : String(out).split(/\r?\n/).filter((l) => /\tdevice$/.test(l)).length;
-        if (!devices) { usb = { adb: true, linked: false, devices: 0 }; return resolve(usb); }
+        if (!devices) { usb = { adb: !(err && err.code === "ENOENT"), linked: false, devices: 0 }; return resolve(usb); }
         execFile(adb, ["reverse", `tcp:${PORT}`, `tcp:${PORT}`], { timeout: 5000 }, (e2) => {
           usb = { adb: true, linked: !e2, devices };
           resolve(usb);

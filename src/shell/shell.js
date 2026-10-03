@@ -58,6 +58,10 @@ function addLayer(kind) {
 }
 /** Save what the roll is editing back into the armed melodic layer. */
 function syncActive() { const a = armed(); if (a && a.type !== "drums") a.notes = roll.getNotes(); }
+/** Load the armed layer back into the roll after its notes changed outside the roll (produce, apply). */
+function loadActive() { const a = armed(); armedId = a.id; if (a.type !== "drums") roll.setActive(a.id, TRACK_COLORS[a.type], a.notes, shownTracks()); }
+/** Tracks shown in the roll and visuals: only yours while Before is on. */
+const shownTracks = () => (abMode === "before" ? project.tracks.filter((t) => t.source === "user") : project.tracks);
 function arm(id) {
   syncActive();
   armedId = id;
@@ -69,6 +73,7 @@ function arm(id) {
 }
 /** What actually plays: mutes, per-piece mutes, solo and the Before/After switch applied. */
 function view() {
+  if (solo && !keyParts(solo).t) solo = null;
   const tracks = project.tracks.map((t) => {
     let notes = t.notes;
     if (t.mutedPitches?.length) notes = notes.filter((n) => !t.mutedPitches.includes(n.pitch));
@@ -132,8 +137,8 @@ visuals.setClock(() => audio.getBeat());
 
 // ---------- Refresh everything that shows the project ----------
 function refreshAll(rebuildMixer = true) {
-  roll.setTracks(project.tracks);
-  visuals.setTracks(project.tracks, project.bars);
+  roll.setTracks(shownTracks());
+  visuals.setTracks(shownTracks(), project.bars);
   visuals.setMeta({ mood: MOODS[mood].label, bpm: project.bpm, key: MOODS[mood].key });
   $("lcdKey").textContent = MOODS[mood].key.replace("minor", "MIN").replace("major", "MAJ").toUpperCase();
   $("lcdBars").textContent = `${project.bars} BAR${project.bars > 1 ? "S" : ""}`;
@@ -426,7 +431,7 @@ $("bpmDown").onclick = () => nudgeBpm(-1);
 $("bpmUp").onclick = () => nudgeBpm(1);
 $("clear").onclick = () => { const a = armed(); if (a.type === "drums") a.notes = []; else roll.clear(); reload(); refreshAll(); status(`Cleared ${a.name}. Other layers are untouched (use the ✕ buttons in the playlist to delete specific parts).`); };
 window.addEventListener("keydown", (e) => {
-  if (e.target?.closest?.("input, textarea")) return;
+  if (e.target?.closest?.("input, textarea, select")) return;
   if (e.code === "Space") { e.preventDefault(); playing ? stop() : play(); }
 });
 
@@ -472,6 +477,7 @@ $("notes").addEventListener("click", (e) => {
     const tip = currentTips[Number(a.dataset.apply)];
     const did = applyTip(project, tip);
     tip.done = did ? "Applied: " + did : "Couldn't apply that one (the track isn't there).";
+    loadActive();
     if (did) { explain("AI PRODUCER", "Producer note applied", did + " The AI suggested it; one tap edited the actual notes."); remember(`The user APPLIED the producer note "${tip.tip}" (${tip.action}).`); }
     reload();
     refreshAll();
@@ -510,6 +516,8 @@ async function produce(instruction = "") {
     /** @type {import("../shared/contracts.js").AiResult} */
     const result = await window.api.produce({ bpm: project.bpm, bars: project.bars, userNotes: userNotes.length ? userNotes : drums, screenshotPng: roll.screenshot(), mood, instruction, genre: $("genre").value, complexity: Number($("complexity").value) });
     project.tracks = [...project.tracks.filter((t) => t.source === "user"), ...result.tracks];
+    if (abMode === "before") { abMode = "after"; $("abBefore").setAttribute("aria-pressed", "false"); $("abAfter").setAttribute("aria-pressed", "true"); }
+    loadActive();
     songTitle = result.title;
     visuals.setPalette(result.palette);
     visuals.setTitle(result.title);

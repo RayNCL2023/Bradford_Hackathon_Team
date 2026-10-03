@@ -51,6 +51,7 @@ export function mount(el, options) {
   canvas.addEventListener("mousedown", onClick);
   window.addEventListener("keydown", onKey);
   window.addEventListener("keyup", (e) => held.delete(e.key.toLowerCase()));
+  window.addEventListener("blur", () => held.clear()); // a key released while the window was unfocused must not stay stuck
   draw();
   // Open scrolled to the bottom so drums and bass are in view.
   requestAnimationFrame(() => wrap.scrollTo(0, 1e6));
@@ -72,8 +73,11 @@ function onClick(e) {
   const r = canvas.getBoundingClientRect();
   const x = (e.clientX - r.left) * (canvas.width / r.width);
   if (x < GUTTER) return;
-  const beat = Math.floor((x - GUTTER) / stepW) / 4;
+  const beat = Math.min(bars * 16 - 1, Math.floor((x - GUTTER) / stepW)) / 4; // never past the loop end
   const pitch = HIGH - Math.floor(((e.clientY - r.top) * (canvas.height / r.height)) / ROW_H);
+  if (pitch < LOW || pitch > HIGH) return;
+  // An armed drum layer isn't edited here (the roll still shows the last melodic layer): play the drum instead of adding a note that would never be saved.
+  if (opts.intercept?.(pitch)) return;
   const hitIdx = userNotes.findIndex((n) => n.pitch === pitch && beat >= n.start && beat < n.start + n.dur);
   if (hitIdx >= 0) userNotes.splice(hitIdx, 1);
   else { userNotes.push({ pitch, start: beat, dur: 0.25, vel: 0.9 }); opts.onNoteOn?.(pitch); }
@@ -82,7 +86,8 @@ function onClick(e) {
 }
 
 function onKey(e) {
-  if (e.target?.closest?.("input, textarea")) return;
+  if (e.target?.closest?.("input, textarea, select, [contenteditable]")) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return; // shortcuts (Ctrl+C, Alt+Tab...) are not notes
   const k = e.key.toLowerCase();
   if (k === "z") { shift = Math.max(-24, shift - 12); return; }
   if (k === "x") { shift = Math.min(12, shift + 12); return; }
@@ -180,7 +185,8 @@ export function hit(pitch) {
 export function setLength(note, beats) {
   if (!note || !userNotes.includes(note)) return;
   const g = grid || 0.0625;
-  note.dur = Math.max(g, Math.min(8, Math.round(beats / g) * g));
+  const room = bars * BEATS_PER_BAR - note.start; // keep the note inside the loop
+  note.dur = Math.max(g, Math.min(8, room, Math.round(beats / g) * g));
   opts.onChange?.();
   draw();
 }

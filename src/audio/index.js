@@ -43,15 +43,20 @@ function makeInstruments() {
 }
 
 /** Call once from a user click (browsers need a gesture before audio can start). */
+let initing = null;
 export async function init() {
   if (started) return;
-  await T().start();
-  inst = makeInstruments();
-  fft = new (T().FFT)(64);
-  wave = new (T().Waveform)(256);
-  T().getDestination().connect(fft);
-  T().getDestination().connect(wave);
-  started = true;
+  // Many buttons call init(); share one start so overlapping clicks don't build two sets of instruments.
+  if (!initing) initing = (async () => {
+    await T().start();
+    inst = makeInstruments();
+    fft = new (T().FFT)(64);
+    wave = new (T().Waveform)(256);
+    T().getDestination().connect(fft);
+    T().getDestination().connect(wave);
+    started = true;
+  })().finally(() => { initing = null; });
+  return initing;
 }
 
 // One-voice drums crash if hit twice at the same instant, so nudge repeat hits forward a hair.
@@ -69,25 +74,31 @@ let kit = {};
  * Use samples for the drums. @param {Record<"kick"|"snare"|"clap"|"hat"|"openHat"|"crash", string>} urls  missing parts keep the synth
  * @returns {Promise<string[]>} the parts that loaded
  */
+let kitLoad = 0;
 export async function loadKit(urls) {
   if (!started) await init();
-  Object.values(kit).forEach((p) => p.dispose());
-  kit = {};
+  // Load into a fresh kit and swap at the end, so quick repeat clicks never leak or mix two kits.
+  const my = ++kitLoad;
+  const next = {};
   const loaded = [];
-  await Promise.all(Object.entries(urls).filter(([, u]) => u).map(async ([part, url]) => {
-    try { const p = new (T().Player)().toDestination(); await p.load(url); kit[part] = p; loaded.push(part); }
-    catch (e) { console.warn("[audio] kit sample failed:", part, e.message); }
+  await Promise.all(Object.entries(urls || {}).filter(([, u]) => u).map(async ([part, url]) => {
+    const p = new (T().Player)().toDestination();
+    try { await p.load(url); next[part] = p; loaded.push(part); }
+    catch (e) { p.dispose(); console.warn("[audio] kit sample failed:", part, e?.message); }
   }));
+  if (my !== kitLoad) { Object.values(next).forEach((p) => p.dispose()); return loaded; }
+  Object.values(kit).forEach((p) => p.dispose());
+  kit = next;
   return loaded;
 }
-export function clearKit() { Object.values(kit).forEach((p) => p.dispose()); kit = {}; }
+export function clearKit() { kitLoad++; Object.values(kit).forEach((p) => p.dispose()); kit = {}; }
 
 function trigger(type, pitch, dur, time, vel) {
   try {
     if (type === "drums") {
       // A loaded sample-pack kit wins over the built-in synth drums.
       const part = DRUM_PART_OF[pitch] || "hat";
-      if (kit[part]?.loaded) { kit[part].start(safeTime("kit-" + part, time)); kit[part].volume.value = -6 + (vel - 0.9) * 10; }
+      if (kit[part]?.loaded) { kit[part].volume.value = -6 + (vel - 0.9) * 10 + drumDb; kit[part].start(safeTime("kit-" + part, time)); }
       else if (pitch === DRUM_PITCH.kick) inst.kick.triggerAttackRelease("C1", "8n", safeTime("kick", time), vel);
       else if (pitch === DRUM_PITCH.snare) inst.snare.triggerAttackRelease("16n", safeTime("snare", time), vel);
       else if (pitch === DRUM_PITCH.clap) inst.clap.triggerAttackRelease("16n", safeTime("clap", time), vel);
@@ -112,7 +123,7 @@ export function loadProject(project) {
   const tr = T().Transport;
   scheduled.forEach((id) => tr.clear(id));
   scheduled = [];
-  tr.bpm.value = project.bpm;
+  if (tr.bpm.value !== project.bpm) setBpm(project.bpm);
   tr.loop = true;
   tr.loopStart = 0;
   tr.loopEnd = `${project.bars}m`;
@@ -126,13 +137,20 @@ export function loadProject(project) {
 
 export function play() { if (started) T().Transport.start(); }
 export function stop() { if (started) { T().Transport.stop(); T().Transport.position = 0; } }
-export function setBpm(bpm) { if (started) T().Transport.bpm.value = bpm; }
+export function setBpm(bpm) {
+  if (!started || !(Number(bpm) > 0)) return;
+  T().Transport.bpm.value = Number(bpm);
+  // Pack loops are stretched to the tempo, so re-stretch them or they drift out of time.
+  clips.forEach((c) => { c.player.playbackRate = clipRate(c.opts); });
+}
 
 // Mixer: change a track type's level in dB relative to its default sound (0 = default, -60 = silent).
 const DRUM_PARTS = ["kick", "snare", "hat", "openHat", "clap", "crash"];
 const baseVol = {};
+let drumDb = 0;               // drum fader offset, also applied to sample-pack hits
 export function setVolume(type, db) {
   if (!started) return;
+  if (type === "drums") drumDb = Number(db) || 0;
   for (const name of type === "drums" ? DRUM_PARTS : [type]) {
     const node = inst[name];
     if (!node?.volume) continue;
@@ -198,11 +216,16 @@ async function loadPlayer(url) {
  *   loopBars repeats it for that many bars.
  * @returns {Promise<string>} clip id, for updateClip()
  */
+const clipRate = (opts) => (opts.sourceBpm ? T().Transport.bpm.value / opts.sourceBpm : 1) * (Number(opts.speed) || 1);
+
 export async function addClip(url, startBeat, opts = {}) {
   if (!started || !url) return "";
+  opts = opts || {};
   const id = Math.random().toString(36).slice(2);
-  const player = await loadPlayer(url);
-  player.playbackRate = (opts.sourceBpm ? T().Transport.bpm.value / opts.sourceBpm : 1) * (Number(opts.speed) || 1);
+  let player;
+  try { player = await loadPlayer(url); }
+  catch (e) { console.warn("[audio] clip failed to load:", e?.message); return ""; }
+  player.playbackRate = clipRate(opts);
   if (opts.loopBars) player.loop = true;
   const chain = buildChain(opts);
   player.connect(chain[0]);
@@ -217,7 +240,7 @@ export function updateClip(id, opts) {
   const c = clips.get(id);
   if (!c) return;
   c.opts = { ...c.opts, ...opts };
-  c.player.playbackRate = (c.opts.sourceBpm ? T().Transport.bpm.value / c.opts.sourceBpm : 1) * (Number(c.opts.speed) || 1);
+  c.player.playbackRate = clipRate(c.opts);
   c.player.disconnect();
   c.chain.forEach((n) => n.dispose());
   c.chain = buildChain(c.opts);
@@ -225,11 +248,24 @@ export function updateClip(id, opts) {
 }
 
 /** Play a clip right now with the given pitch / tone (for auditioning in the panel). */
-let preview = null;
+let preview = null, previewSeq = 0;
+function stopPreview() {
+  if (!preview) return;
+  try { preview.player.stop(); } catch {}
+  preview.player.dispose(); preview.chain.forEach((n) => n.dispose());
+  preview = null;
+}
 export async function previewClip(url, opts = {}) {
   if (!started || !url) return;
-  if (preview) { try { preview.player.stop(); } catch {} preview.player.dispose(); preview.chain.forEach((n) => n.dispose()); }
-  const player = await loadPlayer(url);
+  opts = opts || {};
+  const my = ++previewSeq;
+  stopPreview();
+  let player;
+  try { player = await loadPlayer(url); }
+  catch (e) { console.warn("[audio] preview failed to load:", e?.message); return; }
+  // A newer preview was clicked while this one loaded: drop this one.
+  if (my !== previewSeq) { player.dispose(); return; }
+  stopPreview();
   const chain = buildChain(opts);
   player.connect(chain[0]);
   player.playbackRate = Number(opts.speed) || 1;

@@ -96,9 +96,9 @@ let ws = null;
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onopen = () => { $("conn").classList.add("on"); $("overlay").hidden = true; };
-  ws.onclose = () => { $("conn").classList.remove("on"); $("overlay").hidden = false; setTimeout(connect, 1000); };
+  ws.onclose = () => { $("conn").classList.remove("on"); $("overlay").hidden = false; down.forEach((d) => d.pad.classList.remove("on")); down.clear(); setTimeout(connect, 1000); };
   ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
+    let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "state") {
       Object.assign(S, { root: m.root ?? S.root, scale: m.scale ?? S.scale, playing: !!m.playing, recording: !!m.recording, bars: m.bars ?? S.bars });
       $("loop").textContent = "⟳ " + S.bars + (S.bars > 1 ? " bars" : " bar");
@@ -154,9 +154,9 @@ $("pads").addEventListener("pointerdown", (e) => {
   const pad = e.target.closest(".pad");
   if (!pad) return;
   e.preventDefault();
-  pad.setPointerCapture(e.pointerId);
+  try { pad.setPointerCapture(e.pointerId); } catch (_) {}
   const pitch = Number(pad.dataset.pitch);
-  down.set(e.pointerId, { pad, pitch, t: performance.now() });
+  down.set(e.pointerId, { pad, pitch, kind: S.mode, t: performance.now() });
   pad.classList.add("on");
   send({ type: "note", on: true, pitch, vel: 0.9, kind: S.mode });
   navigator.vibrate?.(12);
@@ -166,9 +166,10 @@ const release = (e) => {
   if (!d) return;
   down.delete(e.pointerId);
   d.pad.classList.remove("on");
-  send({ type: "note", on: false, pitch: d.pitch, kind: S.mode, ms: Math.round(performance.now() - d.t) });
+  send({ type: "note", on: false, pitch: d.pitch, kind: d.kind, ms: Math.round(performance.now() - d.t) });
 };
-["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) => $("pads").addEventListener(ev, release));
+["pointerup", "pointercancel"].forEach((ev) => window.addEventListener(ev, release));
+$("pads").addEventListener("lostpointercapture", release);
 
 const setMode = (m) => { S.mode = m; $("m-melody").setAttribute("aria-pressed", String(m === "melody")); $("m-drums").setAttribute("aria-pressed", String(m === "drums")); render(); };
 $("m-melody").onclick = () => setMode("melody");

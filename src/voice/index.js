@@ -40,7 +40,7 @@ export function mountPanel(el, opts) {
 
 // ---------- Your ad-lib ----------
 function wireAdlib() {
-  let style = STYLES[0], recorder = null, chunks = [], recorded = null, startedAt = 0, timer = null;
+  let style = STYLES[0], recorder = null, chunks = [], recorded = null, startedAt = 0, timer = null, held = false, starting = false;
   const $ = (id) => root.querySelector("#" + id);
   $("adlibStyles").addEventListener("click", (e) => {
     const b = e.target.closest(".tone"); if (!b) return;
@@ -49,6 +49,7 @@ function wireAdlib() {
   });
 
   const stopRec = () => {
+    held = false;
     if (recorder?.state === "recording") recorder.stop();
     clearInterval(timer);
     $("adlibRec").setAttribute("aria-pressed", "false");
@@ -56,8 +57,17 @@ function wireAdlib() {
   };
   const startRec = async (e) => {
     e.preventDefault();
+    if (starting || recorder?.state === "recording") return;
+    held = true;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      $("adlibTimer").textContent = "Recording isn't available here. Type your line instead.";
+      return;
+    }
+    let stream;
+    starting = true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (!held) { stream.getTracks().forEach((t) => t.stop()); $("adlibTimer").textContent = "Hold the button while you speak."; return; }
       recorder = new MediaRecorder(stream);
       chunks = [];
       recorder.ondataavailable = (ev) => ev.data.size && chunks.push(ev.data);
@@ -78,8 +88,10 @@ function wireAdlib() {
         if (s >= MAX_SECONDS) stopRec();
       }, 100);
     } catch (err) {
+      stream?.getTracks().forEach((t) => t.stop());
+      recorder = null;
       $("adlibTimer").textContent = "Couldn't use the microphone: " + err.message;
-    }
+    } finally { starting = false; }
   };
   $("adlibRec").addEventListener("pointerdown", startRec);
   ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => $("adlibRec").addEventListener(ev, stopRec));
@@ -114,7 +126,7 @@ function wireAdlib() {
 export function showResult(result) {
   const box = root.querySelector("#ideas");
   box.innerHTML = `
-    <div class="clips">${result.vocalIdeas.map((v, i) => `
+    <div class="clips">${(result?.vocalIdeas || []).map((v, i) => `
       <div class="clip" data-i="${i}">
         <div class="clip-top"><b>"${esc(v.lyric)}"</b><span class="tag">bar ${v.bar}</span></div>
         <p>${esc(v.style)} · ${esc(v.reason)}</p>
@@ -123,7 +135,7 @@ export function showResult(result) {
     </div>`;
   box.querySelectorAll('[data-act="make"]').forEach((btn) => {
     const card = btn.closest(".clip");
-    btn.onclick = () => makeClip(result.vocalIdeas[Number(card.dataset.i)], card);
+    btn.onclick = () => makeClip(result?.vocalIdeas[Number(card.dataset.i)], card);
   });
 }
 
@@ -168,7 +180,7 @@ function renderControls(idea, clip, card) {
   slider.oninput = () => { state.pitch = Number(slider.value); slider.nextElementSibling.textContent = (state.pitch > 0 ? "+" : "") + state.pitch; };
   slider.onchange = changed;
   const sp = card.querySelector('[data-fx="speed"]');
-  sp.oninput = () => { state.speed = Number(sp.value); sp.nextElementSibling.textContent = state.speed.toFixed(2).replace(/0$/, "") + "×"; };
+  sp.oninput = () => { state.speed = Number(sp.value); sp.nextElementSibling.textContent = String(Number(state.speed.toFixed(2))) + "×"; };
   sp.onchange = changed;
   card.querySelectorAll(".fx .tone").forEach((b) => b.onclick = () => {
     state.tone = b.dataset.tone;
@@ -180,7 +192,9 @@ function renderControls(idea, clip, card) {
   add.onclick = async () => {
     if (state.addedId) return;
     add.disabled = true;
-    state.addedId = await options.onAddClip({ url: clip.url, name: idea.lyric, bar: idea.bar ?? 1, opts: opts() });
-    add.textContent = state.addedId ? `On track at bar ${idea.bar ?? 1}` : "Couldn't add";
+    try { state.addedId = await options.onAddClip({ url: clip.url, name: idea.lyric, bar: idea.bar ?? 1, opts: opts() }); }
+    catch (err) { console.warn("Add to track failed:", err); state.addedId = ""; }
+    add.textContent = state.addedId ? `On track at bar ${idea.bar ?? 1}` : "Couldn't add, try again";
+    if (!state.addedId) add.disabled = false;
   };
 }
