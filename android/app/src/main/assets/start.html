@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Beat Pads</title>
+<style>
+:root { --bg: #0E0D14; --panel: #15131C; --line: #2C2836; --text: #F3EFE6; --muted: #B3ACBE; --amber: #FFB020; --pink: #FF3D7F; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+body { padding: calc(env(safe-area-inset-top, 0px) + 28px) 20px 28px; display: grid; gap: 18px; max-width: 520px; margin: 0 auto; }
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo svg { flex: none; }
+h1 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.02em; }
+p { margin: 0; color: var(--muted); line-height: 1.45; }
+.err { background: #3A1420; color: #FFB3C6; padding: 12px 14px; border-radius: 12px; }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+.big { min-height: 76px; border-radius: 18px; padding: 0 20px; display: flex; align-items: center; gap: 16px; text-align: left; font-weight: 800; font-size: 18px; }
+.big small { display: block; font-weight: 500; font-size: 13px; opacity: .8; margin-top: 2px; }
+.wifi { background: var(--amber); color: var(--bg); }
+.usb { background: var(--panel); border: 1px solid var(--line); }
+.row { display: flex; gap: 8px; }
+input { flex: 1; min-width: 0; min-height: 52px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 0 14px; font: inherit; }
+.go { min-height: 52px; padding: 0 18px; border-radius: 14px; background: var(--text); color: var(--bg); font-weight: 800; }
+label { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+</style>
+</head>
+<body>
+  <div class="logo">
+    <svg width="44" height="44" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="16" fill="#1B1922" stroke="#FFB020" stroke-width="2"></circle><circle cx="17" cy="17" r="10" fill="none" stroke="#3A3546"></circle><circle cx="17" cy="17" r="5" fill="#FF3D7F"></circle><circle cx="17" cy="17" r="1.6" fill="#0E0D14"></circle></svg>
+    <h1>AI Beat Pads</h1>
+  </div>
+  <p>Tap the beat here and it plays in AI Beat Studio on the computer. On the computer, press <b>Connect phone</b>.</p>
+  <p class="err" id="err" hidden></p>
+
+  <button class="big wifi" id="scan">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"></path><path d="M7 12h10"></path></svg>
+    <span>Scan QR code<small>Phone and computer on the same Wi-Fi</small></span>
+  </button>
+  <button class="big usb" id="usb">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v14"></path><path d="m8 6 4-4 4 4"></path><circle cx="12" cy="19" r="3"></circle><path d="M7 10v2l5 3 5-3v-2"></path></svg>
+    <span>USB cable<small>Plug in with USB debugging on</small></span>
+  </button>
+
+  <label for="addr">Or type the address shown on the computer
+    <span class="row"><input id="addr" inputmode="url" autocapitalize="off" autocomplete="off" placeholder="192.168.1.20:7777"><button class="go" id="go">Go</button></span>
+  </label>
+
+<script>
+const err = new URLSearchParams(location.search).get("error");
+if (err) { const e = document.getElementById("err"); e.textContent = err; e.hidden = false; }
+const bridge = window.Pads;
+document.getElementById("addr").value = bridge ? bridge.lastUrl() : "";
+document.getElementById("scan").onclick = () => bridge && bridge.scan();
+document.getElementById("usb").onclick = () => bridge && bridge.usb();
+document.getElementById("go").onclick = () => bridge && bridge.open(document.getElementById("addr").value);
+</script>
+</body>
+</html>

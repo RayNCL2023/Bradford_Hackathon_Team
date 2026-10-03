@@ -3,3 +3,7 @@ node_modules
 out
 dist
 *.log
+android/local.properties
+android/.gradle
+android/build
+android/app/build
