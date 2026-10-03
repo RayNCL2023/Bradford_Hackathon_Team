@@ -73,6 +73,7 @@
  * @property {string} title            A catchy song name the AI invents
  * @property {string[]} palette         3 hex colours for the visuals, e.g. ["#ff3d7f","#7b2ff7","#00e5ff"]
  * @property {"ollama"|"gemini"|"mock"} source  Which model answered
+ * @property {string} [note]            Extra info for the status bar (fallbacks, reused answers)
  */
 
 /**

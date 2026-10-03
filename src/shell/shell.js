@@ -110,7 +110,8 @@ $("produce").onclick = async () => {
     visuals.setPalette(result.palette);
     visuals.setTitle(result.title);
     await play();
-    status(`"${result.title}" is ready. Made by ${result.source === "mock" ? "demo mode (no AI connected yet)" : result.source}.`);
+    const by = { ollama: "local Gemma", gemini: "Gemma (Gemini API)", mock: "the demo track" }[result.source] || result.source;
+    status(`"${result.title}" is ready, made by ${by}.${result.note ? " " + result.note : ""}`);
     voice.showResult(result);
   } catch (err) {
     status("Something went wrong: " + err.message);
