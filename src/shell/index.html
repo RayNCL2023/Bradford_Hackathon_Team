@@ -30,6 +30,7 @@
       <button class="dbl" id="doubleLoop" title="Copy the loop so it's twice as long">Double it</button>
     </div>
     <div class="tp-right">
+      <button class="chip-btn" id="explainBtn" aria-pressed="true" title="Show pop-ups explaining each step (for demos)">Explain: on</button>
       <button class="chip-btn" id="phoneBtn"><span class="phone-dot" id="phoneDot"></span><span id="phoneLabel">Connect phone</span></button>
       <div class="master" aria-label="Master level"><i id="mL"></i><i id="mR"></i></div>
     </div>
@@ -108,8 +109,13 @@
       </label>
       <div class="cap">Producer notes</div>
       <div id="notes" class="notes"><p class="muted">Notes from the producer appear here after it hears your beat.</p></div>
+      <div class="cap mem-cap">Producer memory · NMAFC <span id="memState" class="mem-state">checking…</span></div>
+      <div id="memory" class="memory"><p class="muted">The producer remembers your choices between sessions and adapts to them.</p></div>
     </aside>
   </div>
+
+  <!-- EXPLAIN CALLOUTS (what each click is doing, for judges) -->
+  <div class="callouts" id="callouts" aria-live="polite"></div>
 
   <!-- PERFORMANCE MODE -->
   <div class="perf" id="perf" hidden>

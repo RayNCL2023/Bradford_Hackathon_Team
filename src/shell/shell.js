@@ -41,6 +41,8 @@ $("moods").addEventListener("click", (e) => {
   refreshAll();
   syncPhones();
   status(`${MOODS[mood].label}: ${project.bpm} BPM, key locked to ${MOODS[mood].key}.`);
+  explain("STUDIO", `${MOODS[mood].label} vibe: ${project.bpm} BPM, ${MOODS[mood].key}`, "Every pad and key is now locked to this scale, so nothing you play can sound wrong.", 3500);
+  remember(`The user picked the ${MOODS[mood].label} vibe (${project.bpm} BPM, ${MOODS[mood].key}).`);
 });
 
 // ---------- Modules ----------
@@ -62,6 +64,7 @@ voice.mountPanel($("panel"), {
     project.clips.push({ id, name, url, startBeat: (bar - 1) * 4 });
     refreshAll(false);
     status(`Added "${name}" at bar ${bar}. Change its pitch or tone any time.`);
+    explain("ELEVENLABS", `Vocal “${name}” dropped into bar ${bar}`, `Voiced by ElevenLabs; pitch and ${opts?.tone && opts.tone !== "clean" ? opts.tone : "tone"} effects run live in the studio at no extra cost.`);
     return id;
   },
   onUpdateClip: (id, opts) => audio.updateClip(id, opts),
@@ -312,6 +315,7 @@ $("doubleLoop").onclick = () => {
   audio.loadProject(project);
   refreshAll();
   status(`Doubled: your ${project.bars / 2}-bar loop now plays twice in a ${project.bars}-bar loop. Change the second half to make it move.`);
+  explain("STUDIO", `Loop doubled to ${project.bars} bars`, "Copied every track. Record over the second half to make it evolve.", 3500);
 };
 
 // ---------- Producer ----------
@@ -329,11 +333,15 @@ $("notes").addEventListener("click", (e) => {
     const tip = currentTips[Number(a.dataset.apply)];
     const did = applyTip(project, tip);
     tip.done = did ? "Applied: " + did : "Couldn't apply that one (the track isn't there).";
+    if (did) { explain("AI PRODUCER", "Producer note applied", did + " The AI suggested it; one tap edited the actual notes."); remember(`The user APPLIED the producer note "${tip.tip}" (${tip.action}).`); }
     audio.loadProject(project);
     refreshAll();
     renderNotes();
     status(did || "Nothing to change for that note.");
   } else if (s) {
+    const tip = currentTips[Number(s.dataset.skip)];
+    remember(`The user SKIPPED the producer note "${tip.tip}" (${tip.action}). They don't want this.`);
+    explain("NMAFC MEMORY", "Skipped. The producer will remember that", "Next time it avoids suggesting what you keep rejecting.", 4000);
     currentTips.splice(Number(s.dataset.skip), 1);
     renderNotes();
   }
@@ -355,6 +363,9 @@ async function produce(instruction = "") {
     $("prodSub").textContent = `Gemma 4 · ${line.toLowerCase()}`;
   }, 500);
   visuals.setCooking(true);
+  explain("GEMMA 4", instruction ? `Producer is remixing: “${instruction}”` : "The AI producer is listening to your beat",
+    "Gemma 4 gets your notes plus a picture of your piano roll (multimodal), and writes drums, bass and synths as real notes you can edit.", 7000);
+  if (instruction) remember(`The user asked the producer: "${instruction}".`);
   try {
     /** @type {import("../shared/contracts.js").AiResult} */
     const result = await window.api.produce({ bpm: project.bpm, bars: project.bars, userNotes: userNotes.length ? userNotes : drums, screenshotPng: roll.screenshot(), mood, instruction });
@@ -369,6 +380,8 @@ async function produce(instruction = "") {
     const by = { ollama: "local Gemma", gemini: "Gemma 4", mock: "the demo producer" }[result.source] || result.source;
     $("prodSub").textContent = `${by} · produced "${result.title}"`;
     status(`"${result.title}" produced by ${by}.${result.note ? " " + result.note : ""} Check the producer notes.`);
+    explain("GEMMA 4", `Produced “${result.title}”`, `${result.tracks.length} new tracks, a song title, a colour theme for the visuals, vocal ideas and producer notes, all from your beat.`);
+    if (result.memories?.length) setTimeout(() => explain("NMAFC MEMORY", "The producer remembered you", result.memories.slice(0, 2).map((m) => m.fact).join(" · ")), 1200);
     voice.showResult(result);
     syncPhones();
   } catch (err) {
@@ -394,6 +407,8 @@ $("arrange").onclick = () => {
   refreshAll();
   syncPhones();
   status(did);
+  explain("AI PRODUCER", "Arranged into a full section", did);
+  remember("The user used Arrange my beat to make an 8-bar intro + drop.");
 };
 
 // ---------- Performance mode ----------
@@ -438,7 +453,11 @@ window.api.remote?.onClients((n) => {
   $("phoneBtn").classList.toggle("on", n > 0);
   $("phoneLabel").textContent = n ? (n === 1 ? "Pads connected" : `${n} pads connected`) : "Connect phone";
   $("phoneCount").textContent = n ? `${n} phone${n > 1 ? "s" : ""} connected. Start tapping!` : "No phones connected yet.";
-  if (n) { syncPhones(); status(n === 1 ? "Phone pads connected. Press Rec on the phone and tap a beat." : `${n} phones connected.`); }
+  if (n) {
+    syncPhones();
+    status(n === 1 ? "Phone pads connected. Press Rec on the phone and tap a beat." : `${n} phones connected.`);
+    explain("PHONE PADS", "Phone connected as a MIDI controller", "Every tap is sent to the studio in milliseconds over USB or Wi-Fi. The pads follow the song's key, so every note fits.");
+  }
 });
 async function openPhoneDialog() {
   $("phoneDialog").showModal();
@@ -486,6 +505,7 @@ async function loadSamples() {
     const urls = Object.fromEntries(KIT_PARTS.filter((p) => kitChoice[p] !== undefined).map((p) => [p, samples[kitChoice[p]].url]));
     const loaded = await audio.loadKit(urls);
     status(loaded.length ? `Drums now use the pack: ${loaded.join(", ")}. Phone drum pads too.` : "No drum samples found in the pack.");
+    if (loaded.length) explain("SAMPLES", "Real drum samples loaded", `The kit now uses your sample pack (${loaded.join(", ")}), including the phone's drum pads and the AI's drums.`);
   };
 }
 $("samples").addEventListener("click", async (e) => {
@@ -507,3 +527,46 @@ $("samples").addEventListener("click", async (e) => {
   }
 });
 loadSamples();
+
+// ---------- Explain callouts (what each click is doing, for judges) ----------
+const TAG_COLORS = { "GEMMA 4": "var(--amber)", "AI PRODUCER": "var(--amber)", ELEVENLABS: "var(--lilac)", "NMAFC MEMORY": "var(--green)", "PHONE PADS": "var(--cyan)", STUDIO: "var(--text)", SAMPLES: "var(--pink)" };
+let explainOn = true;
+try { explainOn = localStorage.getItem("explain") !== "off"; } catch (_) {}
+function renderExplainBtn() { $("explainBtn").setAttribute("aria-pressed", String(explainOn)); $("explainBtn").textContent = explainOn ? "Explain: on" : "Explain: off"; }
+$("explainBtn").onclick = () => { explainOn = !explainOn; try { localStorage.setItem("explain", explainOn ? "on" : "off"); } catch (_) {} renderExplainBtn(); };
+renderExplainBtn();
+/** Pop up a short card saying what just happened and which tech did it. */
+function explain(tag, title, text, ms = 5500) {
+  if (!explainOn) return;
+  const box = document.querySelector("#perf:not([hidden])") ? $("perf") : document.body;
+  if ($("callouts").parentElement !== box) box.appendChild($("callouts"));
+  const el = document.createElement("div");
+  el.className = "callout";
+  el.style.setProperty("--c", TAG_COLORS[tag] || "var(--amber)");
+  el.innerHTML = `<span class="ctag">${esc(tag)}</span><b>${esc(title)}</b>${text ? `<span>${esc(text)}</span>` : ""}`;
+  $("callouts").prepend(el);
+  while ($("callouts").children.length > 3) $("callouts").lastElementChild.remove();
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 320); }, ms);
+}
+window.addEventListener("explain", (e) => explain(e.detail.tag, e.detail.title, e.detail.text));
+
+// ---------- Producer memory (NMAFC) ----------
+const remember = (text) => window.api.memory?.remember(text);
+async function refreshMemory() {
+  const r = await window.api.memory?.list();
+  if (!r) return;
+  $("memState").textContent = r.online ? "online" : "offline";
+  $("memState").classList.toggle("on", r.online);
+  if (!r.online) { $("memory").innerHTML = `<p class="muted">Memory is off. Start it with scripts/start-memory.ps1 and the producer will remember your taste between sessions.</p>`; return; }
+  $("memory").innerHTML = r.facts.length
+    ? r.facts.slice(0, 8).map((f) => `<div class="mem-fact${/core/i.test(f.type) ? " core" : ""}"><small>${/core/i.test(f.type) ? "PERMANENT" : /ephemeral/i.test(f.type) ? "FADING FAST" : "REMEMBERED"}</small>${esc(f.fact)}</div>`).join("")
+    : `<p class="muted">Nothing remembered yet. Apply or skip a producer note and it starts learning your taste.</p>`;
+}
+window.api.memory?.onStored((r) => {
+  if (r.ok && r.stored) {
+    explain("NMAFC MEMORY", `Remembered ${r.stored} thing${r.stored > 1 ? "s" : ""} about your taste`, "Neuromorphic memory: facts you repeat get stronger, contradicted ones are replaced, passing moods fade.");
+    refreshMemory();
+  }
+});
+refreshMemory();
+setInterval(refreshMemory, 30000);

@@ -8,6 +8,7 @@
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
+const memory = require("./memory.cjs");
 const DRUM = { kick: 36, snare: 38, clap: 39, closedHat: 42, openHat: 46 };
 const TYPES = ["drums", "bass", "lead", "pad", "pluck"];
 // Producer-note actions the app knows how to apply (see src/shell/producer.js).
@@ -222,14 +223,18 @@ async function produce(req) {
 
   const moods = await loadMoods();
   const mood = moods[req.mood] || moods.dance;
-  const prompt = buildPrompt(req, mood);
+  // What the producer remembers about this user (NMAFC). Instant, and skipped if NMAFC isn't running.
+  const mem = await memory.recall(`What does this user like and dislike when producing beats? Mood ${mood.label}, ${req.bpm} BPM.`);
+  let prompt = buildPrompt(req, mood);
+  if (mem?.facts.length) prompt += `\n\nWhat you remember about this user from earlier sessions (respect it; e.g. don't suggest things they keep rejecting):\n${mem.context}`;
+  const withMemory = (r) => ({ ...r, memories: mem?.facts || [] });
   const problems = [];
 
   // 1) Local Gemma: free, so allow one retry on bad JSON.
   if (process.env.OLLAMA_MODEL) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const result = clean(extractJson(await askOllama(prompt, req)), req, mood, "ollama");
+        const result = withMemory(clean(extractJson(await askOllama(prompt, req)), req, mood, "ollama"));
         cache.set(key, result);
         return result;
       } catch (e) {
@@ -242,7 +247,7 @@ async function produce(req) {
   // 2) Gemma via the Gemini API: costs credit, one call only.
   if (process.env.GEMINI_API_KEY) {
     try {
-      const result = clean(extractJson(await askGemini(prompt, req)), req, mood, "gemini");
+      const result = withMemory(clean(extractJson(await askGemini(prompt, req)), req, mood, "gemini"));
       cache.set(key, result);
       return result;
     } catch (e) {
@@ -254,7 +259,7 @@ async function produce(req) {
 
   // 3) Demo track.
   if (problems.length) console.log("[ai] falling back to demo:", problems.join(" | "));
-  return { ...mockResult(req), note: problems.length ? `AI unavailable (${problems[problems.length - 1].slice(0, 140)}), so this is the demo track.` : "No AI connected yet (set OLLAMA_MODEL or GEMINI_API_KEY in .env), so this is the demo track." };
+  return { ...withMemory(mockResult(req)), note: problems.length ? `AI unavailable (${problems[problems.length - 1].slice(0, 140)}), so this is the demo track.` : "No AI connected yet (set OLLAMA_MODEL or GEMINI_API_KEY in .env), so this is the demo track." };
 }
 
-module.exports = { produce, mockResult, buildPrompt, clean, extractJson, moveByDegrees };
+module.exports = { produce, mockResult, buildPrompt, clean, extractJson, moveByDegrees, memory };

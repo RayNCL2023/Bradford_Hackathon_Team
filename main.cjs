@@ -97,6 +97,10 @@ if (process.env.SMOKE) {
 }
 
 ipcMain.handle("ai:produce", (_e, req) => ai.produce(req));
+// Producer memory (NMAFC): events in, facts out.
+ipcMain.on("memory:remember", (_e, text) => ai.memory.remember(text));
+ipcMain.handle("memory:list", () => ai.memory.list());
+ai.memory.onStored((r) => BrowserWindow.getAllWindows()[0]?.webContents.send("memory:stored", r));
 ipcMain.handle("voice:clips", (_e, ideas) => voice.makeVocalClips(ideas, app.getPath("userData")));
 ipcMain.handle("voice:adlib", (_e, req) => voice.makeAdlib(req, app.getPath("userData")));
 

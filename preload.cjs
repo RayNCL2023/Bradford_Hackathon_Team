@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld("api", {
   makeVocalClips: (ideas) => ipcRenderer.invoke("voice:clips", ideas),
   // { text?, audio?: Uint8Array, mime?, style, seconds? } -> VocalClip (your own ad-lib, re-voiced to fit)
   makeAdlib: (req) => ipcRenderer.invoke("voice:adlib", req),
+  // Producer memory (NMAFC): remember(text) is fire-and-forget; list() -> { online, facts: [{fact, type}] }
+  memory: {
+    remember: (text) => ipcRenderer.send("memory:remember", text),
+    list: () => ipcRenderer.invoke("memory:list"),
+    onStored: (fn) => ipcRenderer.on("memory:stored", (_e, r) => fn(r)),
+  },
   // Sample pack in ./samples: { dir, samples: [{ rel, name, folder, category, bpm, url }] }
   listSamples: () => ipcRenderer.invoke("samples:list"),
   // Phone pads (src/remote): connection info, incoming notes, and studio state sent back to phones.
