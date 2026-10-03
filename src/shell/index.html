@@ -68,6 +68,9 @@
           <button role="tab" id="tab-roll" aria-selected="true">Piano roll</button>
           <button role="tab" id="tab-rack" aria-selected="false">Channel rack</button>
           <span class="tab-note" id="tabNote">Your melody, with the producer's parts behind it</span>
+          <label class="quant">Quantise <select id="quantize" aria-label="Quantise grid">
+            <option value="0">Off</option><option value="1">1/4</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option><option value="0.125">1/32</option></select></label>
+          <button class="tbtn small" id="quantizeNow" title="Snap the notes in the armed layer to the grid">Quantise layer</button>
           <button class="tbtn small ghost" id="clear" title="Clear what you played"><img class="pix" src="../../Icon/Clear.png" alt="">Clear</button>
         </div>
         <div class="roll-wrap" id="rollWrap"><div id="roll"></div></div>
@@ -102,6 +105,11 @@
         <button class="move" data-ins="Make it darker and moodier">Darker</button>
         <button class="move" data-ins="Make the drums harder and busier">Harder drums</button>
         <button class="move" data-ins="Write a new bassline">New bassline</button>
+      </div>
+      <div class="ab" role="group" aria-label="Compare">
+        <span>Compare</span>
+        <button id="abBefore" aria-pressed="false" title="Hear only what you played">Before</button>
+        <button id="abAfter" aria-pressed="true" title="Hear the full production">After</button>
       </div>
       <button class="ghost-btn" id="arrange">Arrange my beat (8 bars, intro + drop)</button>
       <label class="ask" for="instruction">Tell the producer
